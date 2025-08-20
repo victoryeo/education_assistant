@@ -6,6 +6,7 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_postgres.vectorstores import PGVector
 #from langchain_community.vectorstores import PGVector
+from langchain_community.document_loaders import HuggingFaceDatasetLoader
 from langchain_community.vectorstores.pgvector import DistanceStrategy
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -24,6 +25,7 @@ os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
 os.environ["SUPABASE_URL"] = os.getenv("SUPABASE_URL")
 os.environ["SUPABASE_KEY"] = os.getenv("SUPABASE_KEY")
 os.environ["SUPABASE_DB_CONNECTION_STRING"] = os.getenv("SUPABASE_DB_CONNECTION_STRING")
+os.environ["HUGGINGFACEHUB_API_TOKEN"] = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 
 # State definition for LangGraph
 class TaskState2(TypedDict):
@@ -37,8 +39,9 @@ class TaskState2(TypedDict):
     user_id: str
     response: str
     extracted_info: Dict[str, Any]
+    retrieved_content: List[Document]  # New field for RAG content
 
-# NOTE: Langgraph education assistant
+# NOTE: Langgraph education assistant with Agentic RAG
 class EducationAssistant:
     def __init__(self, role_prompt: str, category: str, user_id: str):
         self.role_prompt = role_prompt
@@ -71,11 +74,7 @@ class EducationAssistant:
         
         # Initialize PGVector client and table
         self.collection_name = f"tasks_{category}_{user_id}" # Used as table name
-        
-        # supabase initialization
-        #url: str = os.environ.get("SUPABASE_URL")
-        #key: str = os.environ.get("SUPABASE_KEY")
-        #supabase: Client = create_client(url, key)
+        self.knowledge_collection_name = f"knowledge_{category}_{user_id}"
 
         # Test PostgreSQL connection
         try:
@@ -95,17 +94,89 @@ class EducationAssistant:
                 distance_strategy="cosine", # Align with Qdrant's COSINE
                 use_jsonb=True # <--- ADD THIS LINE TO EXPLICITLY SET JSONB
             )
-            print(f"✅ PGVector initialized with collection_name: {self.collection_name}")
+            
+            self.knowledge_store = PGVector(
+                collection_name=self.knowledge_collection_name,
+                connection=self.db_connection_string,
+                embeddings=self.embeddings,
+                distance_strategy="cosine",
+                use_jsonb=True
+            )
+            print(f"✅ PGVector initialized with collections: {self.collection_name}, {self.knowledge_collection_name}")
         except Exception as e:
             print(f"❌ PGVector initialization failed: {e}")
 
+        # Load educational content
+        self._load_educational_datasets()
+        
         # Create LangGraph workflow
         self.workflow = self._create_workflow()
-        
+    
     def _setup_embeddings(self):
         """Setup embeddings for vector store"""
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         return embeddings
+    
+    def _load_educational_datasets(self):
+        """Load educational datasets from HuggingFace and store in vector database"""
+        print("Loading educational datasets...")
+        
+        # Define datasets to load (you can customize this list)
+        datasets_config = [
+            {
+                "name": "wikipedia",
+                "subset": "20220301.en",
+                "split": "train",
+                "page_content_column": "text",
+                "max_docs": 1000  # Limit for demo purposes
+            },
+            {
+                "name": "squad",
+                "split": "train",
+                "page_content_column": "context",
+                "max_docs": 500
+            }
+        ]
+        
+        for config in datasets_config:
+            try:
+                loader = HuggingFaceDatasetLoader(
+                    dataset_name=config["name"],
+                    subset=config.get("subset"),
+                    split=config["split"],
+                    page_content_column=config["page_content_column"]
+                )
+                
+                documents = loader.load()
+                
+                # Limit documents if specified
+                if config.get("max_docs"):
+                    documents = documents[:config["max_docs"]]
+                
+                # Add metadata and store in knowledge base
+                for doc in documents:
+                    doc.metadata.update({
+                        "source": config["name"],
+                        "category": self.category,
+                        "user_id": self.user_id,
+                        "loaded_at": datetime.now().isoformat()
+                    })
+                
+                # Store in knowledge vector store
+                self.knowledge_store.add_documents(documents)
+                print(f"✅ Loaded {len(documents)} documents from {config['name']}")
+                
+            except Exception as e:
+                print(f"❌ Failed to load dataset {config['name']}: {e}")
+    
+    def _retrieve_educational_content(self, query: str, k: int = 3) -> List[Document]:
+        """Retrieve relevant educational content using RAG"""
+        try:
+            results = self.knowledge_store.similarity_search(query, k=k)
+            return results
+        except Exception as e:
+            print(f"❌ Error retrieving educational content: {e}")
+            return []
     
     def _task_to_document(self, task: Dict[str, Any]) -> Document:
         """Convert a task dictionary to a Document for vector storage"""
@@ -185,13 +256,12 @@ class EducationAssistant:
 
             cur.close()
             conn.close()
-
         except Exception as e:
             print(f"ERROR: Exception during direct SQL delete for task {task_id}: {e}")
             import traceback
             traceback.print_exc()
             # If deletion failed, you might still want to try to add the new version.
-        
+
         # --- Add the updated document ---
         print(f"DEBUG: Calling _add_task_to_vector_store for task_id: {task_id} after delete attempt.")
         self._add_task_to_vector_store(task)
@@ -233,7 +303,7 @@ class EducationAssistant:
                 return []
 
             collection_uuid = collection_uuid_row[0]
-            
+
             # Then, retrieve documents from langchain_pg_embedding for that collection_id
             # The metadata is stored in the 'cmetadata' column
             cur.execute(f"SELECT cmetadata FROM langchain_pg_embedding WHERE collection_id = %s;", (str(collection_uuid),))
@@ -262,10 +332,11 @@ class EducationAssistant:
             return [t for t in self.tasks if t.get('user_id') == self.user_id and t.get('category') == self.category]
         
     def _create_workflow(self):
-        """Create the LangGraph workflow for task processing"""
+        """Create the LangGraph workflow for task processing with RAG"""
         workflow = StateGraph(TaskState2)
         
         workflow.add_node("analyze_intent", self._analyze_intent)
+        workflow.add_node("retrieve_educational_content", self._retrieve_educational_content_node)
         workflow.add_node("extract_task_info", self._extract_task_info)
         workflow.add_node("create_tasks", self._create_tasks)
         workflow.add_node("update_tasks", self._update_tasks)
@@ -279,13 +350,15 @@ class EducationAssistant:
             "analyze_intent",
             self._route_by_intent,
             {
-                "create": "extract_task_info",
-                "update": "extract_task_info", 
+                "create": "retrieve_educational_content",
+                "update": "retrieve_educational_content", 
                 "complete": "complete_tasks",
                 "summary": "generate_summary",
-                "query": "generate_response"
+                "query": "retrieve_educational_content"
             }
         )
+        
+        workflow.add_edge("retrieve_educational_content", "extract_task_info")
         
         workflow.add_conditional_edges(
             "extract_task_info",
@@ -322,8 +395,46 @@ class EducationAssistant:
             intent = "query"
         
         state["intent"] = intent
-        state["messages"].append({"role": "system", "content": f"Intent classified as: {intent}"})
         return state
+    
+    def _retrieve_educational_content_node(self, state: TaskState2) -> TaskState2:
+        """Retrieve relevant educational content using RAG"""
+        user_input = state["user_input"]
+        
+        # Enhanced query generation for better retrieval
+        enhanced_query = self._generate_enhanced_query(user_input, state["intent"])
+        
+        # Retrieve relevant educational content
+        retrieved_content = self._retrieve_educational_content(enhanced_query, k=3)
+        
+        state["retrieved_content"] = retrieved_content
+        state["messages"].append({
+            "role": "system", 
+            "content": f"Retrieved {len(retrieved_content)} educational documents for query: {enhanced_query}"
+        })
+        
+        return state
+    
+    def _generate_enhanced_query(self, user_input: str, intent: str) -> str:
+        """Generate enhanced query for better educational content retrieval"""
+        query_prompt = f"""
+        Based on the user input and intent, generate an enhanced search query for educational content.
+        
+        User Input: {user_input}
+        Intent: {intent}
+        Category: {self.category}
+        
+        Generate a concise, informative query that would help find relevant educational materials.
+        Focus on key concepts, subjects, and learning objectives.
+        
+        Enhanced Query:
+        """
+        
+        try:
+            response = self.llm.invoke([HumanMessage(content=query_prompt)])
+            return response.content.strip()
+        except:
+            return user_input  # Fallback to original input
     
     def _route_by_intent(self, state: TaskState2) -> str:
         """Route based on detected intent"""
@@ -334,16 +445,22 @@ class EducationAssistant:
         return state["intent"]
     
     def _extract_task_info(self, state: TaskState2) -> TaskState2:
-        """Extract task information using LLM"""
+        """Extract task information using LLM with RAG context"""
         print(f"Extracting task info: {state['user_input']}")
         extraction_prompt = """
-        Extract task information from the user input. Return a JSON object with the following structure:
+        Extract task information from the user input, considering the retrieved educational content.
+        
+        Retrieved Educational Content:
+        {retrieved_content}
+        
+        Extract a JSON object with the following structure:
         {{
             "tasks": [
                 {{
                     "title": "task title",
-                    "description": "optional description",
+                    "description": "optional description with educational context",
                     "deadline": "ISO format datetime if mentioned",
+                    "educational_context": "how this relates to learning objectives"
                 }}
             ]
         }}
@@ -352,9 +469,20 @@ class EducationAssistant:
         """
         print(extraction_prompt.format(user_input=state["user_input"]))
 
+        # Format retrieved content for the prompt
+        content_text = "\n\n".join([
+            f"Source: {doc.metadata.get('source', 'unknown')}\nContent: {doc.page_content[:500]}..."
+            for doc in state.get("retrieved_content", [])
+        ])
+        
         try:
             print("Extracting task info...")
-            response = self.llm.invoke([HumanMessage(content=extraction_prompt.format(user_input=state["user_input"]))])
+            response = self.llm.invoke([
+                HumanMessage(content=extraction_prompt.format(
+                    retrieved_content=content_text,
+                    user_input=state["user_input"]
+                ))
+            ])
             
             print(f"Response: {response}")
             json_match = re.findall(r'```json\n(.*?)\n```', response.content, re.DOTALL)
@@ -400,10 +528,10 @@ class EducationAssistant:
         return {"tasks": tasks}
     
     def _create_tasks(self, state: TaskState2) -> TaskState2:
-        """Create new tasks based on extracted information"""
+        """Create new tasks with educational context"""
         created_tasks = []
         print(f"Creating tasks: {state['user_input']}")
-        
+
         for task_info in state["extracted_info"].get("tasks", []):
             task = {
                 'id': str(uuid.uuid4()),
@@ -413,7 +541,8 @@ class EducationAssistant:
                 'created_at': datetime.now().isoformat(),
                 'category': self.category,
                 'user_id': self.user_id,
-                'completed': False
+                'completed': False,
+                'educational_context': task_info.get('educational_context', '')
             }
             
             # Add optional fields
@@ -435,7 +564,7 @@ class EducationAssistant:
         return state
     
     def _update_tasks(self, state: TaskState2) -> TaskState2:
-        """Update existing tasks"""
+        """Update existing tasks with educational context"""
         print(f"Updating tasks: {state['user_input']}")
         updated_tasks = []
         user_input = state["user_input"].lower()
@@ -462,9 +591,14 @@ class EducationAssistant:
                     task['priority'] = 'low'
                     updated = True
                 
+                # Update educational context if relevant content was retrieved
+                if state.get("retrieved_content"):
+                    task['educational_context'] = "Updated with new learning materials"
+                    updated = True
+                
                 if updated:
                     task['updated_at'] = datetime.now().isoformat()
-                    
+
                     # Update in both memory and vector store
                     for i, mem_task in enumerate(self.tasks):
                         if mem_task['id'] == task['id']:
@@ -511,23 +645,32 @@ class EducationAssistant:
         return state
     
     def _generate_summary(self, state: TaskState2) -> TaskState2:
-        """Generate a task summary"""
+        """Generate a task summary with educational insights"""
         print(f"Generating summary: {state['user_input']}")
         tasks_summary = self.get_tasks_summary()
         
         summary_prompt = """
-        Based on the following task summary, create a helpful overview for the user.
-        Use a friendly and encouraging tone. Group tasks by urgency and highlight any missing deadlines.
+        Based on the task summary and retrieved educational content, create a comprehensive overview.
+        Include learning progress insights and recommendations based on the educational materials.
         
         Task Summary:
         {tasks_summary}
         
+        Retrieved Educational Content:
+        {retrieved_content}
+        
         Category: {category}
         """
+        
+        content_text = "\n\n".join([
+            f"Source: {doc.metadata.get('source', 'unknown')}\nContent: {doc.page_content[:300]}..."
+            for doc in state.get("retrieved_content", [])
+        ])
         
         response = self.llm.invoke([
             HumanMessage(content=summary_prompt.format(
                 tasks_summary=json.dumps(tasks_summary, indent=2),
+                retrieved_content=content_text,
                 category=self.category
             ))
         ])
@@ -536,7 +679,7 @@ class EducationAssistant:
         return state
     
     def _generate_response(self, state: TaskState2) -> TaskState2:
-        """Generate final response to user"""
+        """Generate final response with educational context"""
         print(f"Generating response: {state['user_input']}")
         if state.get("response"):
             return state  # Already have a response from summary
@@ -545,20 +688,26 @@ class EducationAssistant:
             "intent": state["intent"],
             "created_tasks": state.get("created_tasks", []),
             "updated_tasks": state.get("updated_tasks", []),
-            "category": self.category
+            "category": self.category,
+            "retrieved_content": state.get("retrieved_content", [])
         }
         
         response_prompt = f"""
         {self.role_prompt}
         
-        Context: The user's intent was '{context["intent"]}' for {context["category"]} tasks.
+        Context: Educational task management for {context["category"]}.
+        Intent: {context["intent"]}
         
         Created tasks: {len(context["created_tasks"])}
         Updated tasks: {len(context["updated_tasks"])}
         
+        Retrieved Educational Content:
+        {self._format_retrieved_content(context["retrieved_content"])}
+        
         Original user input: {state["user_input"]}
         
-        Provide a helpful response acknowledging what was done and offering next steps if appropriate.
+        Provide an educational response that incorporates the retrieved learning materials.
+        Offer insights, learning recommendations, and contextual information.
         """
         
         response = self.llm.invoke([HumanMessage(content=response_prompt)])
@@ -600,7 +749,6 @@ class EducationAssistant:
             result = cur.fetchone()
             cur.close()
             conn.close()
-
             if result and result[0]:
                 found_task = result[0] # cmetadata is the first (and only) column selected
                 print(f"DEBUG: Task {task_id} found in LangChain PGVector.")
@@ -616,6 +764,19 @@ class EducationAssistant:
             import traceback
             traceback.print_exc()
             return None
+  
+    def _format_retrieved_content(self, retrieved_content: List[Document]) -> str:
+        """Format retrieved content for the prompt"""
+        if not retrieved_content:
+            return "No relevant educational content found."
+        
+        formatted = []
+        for i, doc in enumerate(retrieved_content, 1):
+            formatted.append(f"Document {i} (Source: {doc.metadata.get('source', 'unknown')}):")
+            formatted.append(f"{doc.page_content[:200]}...")
+            formatted.append("---")
+        
+        return "\n".join(formatted)
 
     async def process_message(self, user_input: str):
         """Process user message through the LangGraph workflow"""
@@ -630,7 +791,8 @@ class EducationAssistant:
             category=self.category,
             user_id=self.user_id,
             response="",
-            extracted_info={}
+            extracted_info={},
+            retrieved_content=[]
         )
         
         config = {"configurable": {"thread_id": f"{self.user_id}_{self.category}"}}
@@ -765,7 +927,7 @@ class EducationAssistant:
             cur.close()
             conn.close()
             task_deleted_from_db = True
-                
+
         except Exception as e:
             print(f"ERROR: Exception during DB deletion for task {task_id}: {e}")
             import traceback
@@ -775,9 +937,8 @@ class EducationAssistant:
         initial_count = len(self.tasks)
         self.tasks = [t for t in self.tasks if t.get('id') != task_id]
         task_was_in_memory = len(self.tasks) < initial_count
-        
         print(f"DEBUG: delete_task END. DB deleted={task_deleted_from_db}, In-memory deleted={task_was_in_memory}")
-        
+
         return task_deleted_from_db or task_was_in_memory
 
     def _extract_deadline(self, text: str) -> str:

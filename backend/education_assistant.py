@@ -117,27 +117,103 @@ class EducationAssistant:
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         return embeddings
     
+    def _load_exam_data(self, file_path: str) -> List[Document]:
+        """Load and process data from exam JSON file"""
+        try:
+            print(f"Attempting to load exam data from: {file_path}")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                try:
+                    content = f.read()
+                    # Remove JavaScript-style comments (// ...)
+                    content = re.sub(r'//.*?$', '', content, flags=re.MULTILINE)
+                    # Remove multi-line comments (/* ... */)
+                    content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+                    data = json.loads(content)
+                except json.JSONDecodeError as e:
+                    print(f"JSON decode error: {e}")
+                    raise
+                
+            documents = []
+            for student in data.get('students', []):
+                # Create a document for the student's overall information
+                student_doc = {
+                    'page_content': f"Student: {student.get('name')} (ID: {student.get('student_id')})\n                    Personality: {', '.join(student.get('initial_personality', []))}\n"
+                }
+                
+                # Add scores information
+                if 'math_scores' in student and student['math_scores']:
+                    scores = student['math_scores']
+                    avg_score = sum(s['score']/s['max_score'] for s in scores) / len(scores)
+                    topics = set(s['topic'] for s in scores)
+                    
+                    student_doc['page_content'] += f"\nMath Performance (Average: {avg_score:.1%})\n"
+                    student_doc['page_content'] += f"Topics covered: {', '.join(topics)}\n"
+                    
+                    # Add recent scores, handling potential None values in timestamps
+                    try:
+                        recent_scores = sorted(
+                            scores,
+                            key=lambda x: x.get('timestamp') or '1970-01-01T00:00:00Z',
+                            reverse=True
+                        )[:3]
+                        student_doc['page_content'] += "\nRecent scores:\n"
+                        for score in recent_scores:
+                            student_doc['page_content'] += f"- {score.get('topic', 'Unknown')}: {score.get('score', '?')}/{score.get('max_score', '?')} ({score.get('type', 'Exercise')})\n"
+                    except Exception as e:
+                        print(f"Warning: Error processing scores for student {student.get('name', 'Unknown')}: {e}")
+                        student_doc['page_content'] += "\n(Score information not available)\n"
+                
+                # Add metadata
+                student_doc['metadata'] = {
+                    'source': 'deepseek_data',
+                    'student_id': student.get('student_id'),
+                    'student_name': student.get('name'),
+                    'category': self.category,
+                    'user_id': self.user_id,
+                    'loaded_at': datetime.now().isoformat()
+                }
+
+                print(student_doc)
+                
+                documents.append(Document(**student_doc))
+                
+            print(f"✅ Loaded {len(documents)} student records from deepseek data")
+            return documents
+            
+        except Exception as e:
+            print(f"❌ Failed to load deepseek data: {e}")
+            return []
+    
     def _load_educational_datasets(self):
-        """Load educational datasets from HuggingFace and store in vector database"""
+        """Load educational datasets from various sources and store in vector database"""
         print("Loading educational datasets...")
         
-        # Define datasets to load (you can customize this list)
+        # Load from deepseek.json if available
+        examdata_path = os.path.join(os.path.dirname(__file__), 'deepseek_json_20250820_1cc700.json')
+        if os.path.exists(examdata_path):
+            print("Found examdata data, loading...")
+            examdata_docs = self._load_exam_data(examdata_path)
+            if examdata_docs:
+                self.knowledge_store.add_documents(examdata_docs)
+        
+        # Define HuggingFace datasets to load
         datasets_config = [
             {
                 "name": "wikipedia",
                 "subset": "20220301.en",
                 "split": "train",
                 "page_content_column": "text",
-                "max_docs": 1000  # Limit for demo purposes
+                "max_docs": 500  # Reduced from 1000 to balance with exam data
             },
             {
                 "name": "squad",
                 "split": "train",
                 "page_content_column": "context",
-                "max_docs": 500
+                "max_docs": 300  # Reduced from 500 to balance with exam data
             }
         ]
         
+        # Load from HuggingFace datasets
         for config in datasets_config:
             try:
                 loader = HuggingFaceDatasetLoader(

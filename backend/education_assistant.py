@@ -199,14 +199,14 @@ class EducationAssistant:
         # Define HuggingFace datasets to load
         datasets_config = [
             {
-                "name": "wikipedia",
+                "path": "wikipedia",
                 "subset": "20220301.en",
                 "split": "train",
                 "page_content_column": "text",
                 "max_docs": 500  # Reduced from 1000 to balance with exam data
             },
             {
-                "name": "squad",
+                "path": "squad",
                 "split": "train",
                 "page_content_column": "context",
                 "max_docs": 300  # Reduced from 500 to balance with exam data
@@ -217,8 +217,8 @@ class EducationAssistant:
         for config in datasets_config:
             try:
                 loader = HuggingFaceDatasetLoader(
-                    dataset_name=config["name"],
-                    subset=config.get("subset"),
+                    path=config["path"],
+                    name=config.get("subset"),  # 'name' is used for configurations like '20220301.en' in Wikipedia
                     split=config["split"],
                     page_content_column=config["page_content_column"]
                 )

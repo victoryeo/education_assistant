@@ -105,7 +105,7 @@ export const chatWithAssistant = async (data: ChatRequest): Promise<ChatResponse
   }
 
   console.log(data.conversation_id || `conv_${Date.now()}`)
-
+  console.log(response.data)
   // Map the response to match the expected ChatResponse interface
   return {
     response: response.data.assistant_response,

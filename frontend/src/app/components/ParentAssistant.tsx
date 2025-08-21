@@ -15,6 +15,7 @@ type AssistantProps = {
 };
 
 export default function ParentAssistant({ onBack }: AssistantProps) {
+  const [assistantMessages, setAssistantMessages] = useState<Message>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -158,8 +159,10 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
         sender: 'assistant',
         timestamp: new Date(response.timestamp),
       };
+      console.log(assistantMessage)
 
       setMessages((prev) => [...prev, assistantMessage]);
+      setAssistantMessages(assistantMessage)
 
       // Fetch tasks after getting assistant's response
       handleFetchTasks();
@@ -302,6 +305,12 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
               <span className="text-sm font-medium">Send</span>
             </button>
           </div>
+          {/* Assistant's Response */}
+          {assistantMessages && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+              <p className="text-gray-800">{assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}</p>
+            </div>
+          )}          
         </form>
       </div>
     </div>

@@ -8,7 +8,7 @@ import StudentAssistant from './components/StudentAssistant';
 import { useSession, signOut } from 'next-auth/react';
 import { useAuth } from './contexts/AuthContext';
 
-type AssistantType = 'work' | 'personal' | null;
+type AssistantType = 'student' | 'parent' | null;
 
 interface Assistant {
   id: string;
@@ -42,8 +42,8 @@ export default function Home() {
   const { data: session, status } = useSession();
 
   const assistants: Assistant[] = [
-    { id: 'work', name: 'Work Assistant', emoji: '💼', color: 'bg-blue-100 hover:bg-blue-200' },
-    { id: 'personal', name: 'Personal Assistant', emoji: '🏠', color: 'bg-green-100 hover:bg-green-200' },
+    { id: 'student', name: 'Student Assistant', emoji: '🎓', color: 'bg-blue-100 hover:bg-blue-200' },
+    { id: 'parent', name: 'Parent Assistant', emoji: '🏠', color: 'bg-green-100 hover:bg-green-200' },
   ];
 
   // Handle OAuth callback parameters
@@ -277,10 +277,10 @@ export default function Home() {
               </table>
             </div>
           </div>
-        ) : activeAssistant === 'work' ? (
-          <ParentAssistant onBack={handleBack} />
-        ) : (
+        ) : activeAssistant === 'student' ? (
           <StudentAssistant onBack={handleBack} />
+        ) : (
+          <ParentAssistant onBack={handleBack} />
         )}
       </div>
     </div>

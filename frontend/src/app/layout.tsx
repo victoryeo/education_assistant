@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'LangGraph Assistant',
-  description: 'Your personal and work AI assistant',
+  description: 'Your education AI assistant',
 };
 
 export default function RootLayout({

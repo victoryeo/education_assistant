@@ -19,6 +19,8 @@ import os
 import re
 import json
 import uuid
+import traceback
+from datasets import load_dataset
 
 load_dotenv()
 os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
@@ -177,11 +179,11 @@ class EducationAssistant:
                 
                 documents.append(Document(**student_doc))
                 
-            print(f"✅ Loaded {len(documents)} student records from deepseek data")
+            print(f"✅ Loaded {len(documents)} student records from exam data")
             return documents
             
         except Exception as e:
-            print(f"❌ Failed to load deepseek data: {e}")
+            print(f"❌ Failed to load exam data: {e}")
             return []
     
     def _load_educational_datasets(self):
@@ -200,51 +202,73 @@ class EducationAssistant:
         datasets_config = [
             {
                 "path": "wikipedia",
-                "subset": "20220301.en",
-                "split": "train",
+                "name": "20220301.en",
                 "page_content_column": "text",
                 "max_docs": 500  # Reduced from 1000 to balance with exam data
             },
             {
                 "path": "squad",
-                "split": "train",
                 "page_content_column": "context",
                 "max_docs": 300  # Reduced from 500 to balance with exam data
             }
         ]
         
         # Load from HuggingFace datasets
+        print(f"Loading HuggingFace datasets: {datasets_config}")
         for config in datasets_config:
             try:
-                loader = HuggingFaceDatasetLoader(
-                    path=config["path"],
-                    name=config.get("subset"),  # 'name' is used for configurations like '20220301.en' in Wikipedia
-                    split=config["split"],
-                    page_content_column=config["page_content_column"]
-                )
-                
-                documents = loader.load()
-                
+                print(f"Loading dataset: {config.get('path')} - {config.get('name', '')}")
+            
+                # Use try/except with different parameter combinations
+                loader_params = {
+                    "path": config["path"],
+                    "page_content_column": config["page_content_column"]
+                }
+            
+                # Add name if specified
+                if config.get("name"):
+                    loader_params["name"] = config["name"]
+            
+                print(f"Loading documents from HuggingFace dataset: {config['path']}")
+                loader = HuggingFaceDatasetLoader(**loader_params)
+
+                # Load documents with error handling
+                try:
+                    documents = loader.load()
+                    print(f"Successfully loaded {len(documents)} documents")
+                except Exception as load_error:
+                    print(f"Error loading documents: {load_error}")
+                    continue
+            
                 # Limit documents if specified
-                if config.get("max_docs"):
+                if config.get("max_docs") and len(documents) > config["max_docs"]:
                     documents = documents[:config["max_docs"]]
+                    print(f"Limited to {len(documents)} documents")
                 
-                # Add metadata and store in knowledge base
+                # Add metadata
                 for doc in documents:
                     doc.metadata.update({
-                        "source": config["name"],
+                        "source": config["path"],
+                        "subset": config.get("name", ""),
                         "category": self.category,
-                        "user_id": self.user_id,
-                        "loaded_at": datetime.now().isoformat()
-                    })
-                
+                            "user_id": self.user_id,
+                            "loaded_at": datetime.now().isoformat()
+                        })
+                    
                 # Store in knowledge vector store
-                self.knowledge_store.add_documents(documents)
-                print(f"✅ Loaded {len(documents)} documents from {config['name']}")
-                
+                if documents:
+                    try:
+                        self.knowledge_store.add_documents(documents)
+                        print(f"✅ Successfully stored {len(documents)} documents from {config['path']}")
+                    except Exception as store_error:
+                        print(f"❌ Error storing documents: {store_error}")
+                else:
+                    print(f"⚠️ No documents to store for {config['path']}")
+                        
             except Exception as e:
-                print(f"❌ Failed to load dataset {config['name']}: {e}")
-    
+                print(f"❌ Failed to process dataset {config.get('path')}: {e}")
+                traceback.print_exc()
+        
     def _retrieve_educational_content(self, query: str, k: int = 3) -> List[Document]:
         """Retrieve relevant educational content using RAG"""
         try:
@@ -299,7 +323,6 @@ class EducationAssistant:
             return doc_id
         except Exception as e:
             print(f"ERROR: Failed to add task to vector store: {e}")
-            import traceback
             traceback.print_exc() # Print full traceback for more details
             return None # Indicate failure
 
@@ -334,7 +357,6 @@ class EducationAssistant:
             conn.close()
         except Exception as e:
             print(f"ERROR: Exception during direct SQL delete for task {task_id}: {e}")
-            import traceback
             traceback.print_exc()
             # If deletion failed, you might still want to try to add the new version.
 
@@ -358,7 +380,6 @@ class EducationAssistant:
             return tasks
         except Exception as e:
             print(f"ERROR: Search error in LangChain PGVector: {e}")
-            import traceback
             traceback.print_exc()
             return [t for t in self.tasks if t.get('user_id') == self.user_id and t.get('category') == self.category] # Fallback to in-memory, filtered
 
@@ -403,7 +424,6 @@ class EducationAssistant:
             return tasks
         except Exception as e:
             print(f"ERROR: Error getting all tasks from LangChain PGVector (direct query): {e}")
-            import traceback
             traceback.print_exc()
             return [t for t in self.tasks if t.get('user_id') == self.user_id and t.get('category') == self.category]
         
@@ -837,7 +857,6 @@ class EducationAssistant:
                 return None
         except Exception as e:
             print(f"ERROR: Error searching for task {task_id} in LangChain PGVector: {e}")
-            import traceback
             traceback.print_exc()
             return None
   
@@ -1006,7 +1025,6 @@ class EducationAssistant:
 
         except Exception as e:
             print(f"ERROR: Exception during DB deletion for task {task_id}: {e}")
-            import traceback
             traceback.print_exc()
         
         # Remove from in-memory storage
@@ -1127,10 +1145,10 @@ When tasks are missing deadlines, respond with something like "I notice [task] d
         if category not in self.assistants[user_id]:
             print(f"INFO: Creating new '{category}' assistant for user '{user_id}'.")
             
-            # Personal assistant configuration
+            # Parent assistant configuration
             if category == 'parent':
                 role_prompt = self.parent_role
-            # Work assistant configuration
+            # Student assistant configuration
             elif category == 'student':
                 role_prompt = self.student_role
             else:

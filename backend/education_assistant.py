@@ -461,7 +461,9 @@ class EducationAssistant:
             self._route_by_action,
             {
                 "create": "create_tasks",
-                "update": "update_tasks"
+                "update": "update_tasks",
+                "query": "generate_response",
+                "complete": "complete_tasks"
             }
         )
         
@@ -780,6 +782,7 @@ class EducationAssistant:
         """Generate final response with educational context"""
         print(f"Generating response: {state['user_input']}")
         if state.get("response"):
+            print("Response already generated")
             return state  # Already have a response from summary
         
         context = {
@@ -803,12 +806,13 @@ class EducationAssistant:
         {self._format_retrieved_content(context["retrieved_content"])}
         
         Original user input: {state["user_input"]}
-        
+        Extracted info: {state["extracted_info"]}        
         Provide an educational response that incorporates the retrieved learning materials.
         Offer insights, learning recommendations, and contextual information.
         """
         
         response = self.llm.invoke([HumanMessage(content=response_prompt)])
+        print(f"Response: {response}")
         state["response"] = response.content
         return state
 

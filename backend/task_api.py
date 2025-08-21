@@ -529,6 +529,8 @@ async def create_parent_tasks(request: TaskRequest, current_user: User = Depends
             raise HTTPException(status_code=500, detail="Parent assistant not available")
         
         assistant_response, created_tasks = await parent_assistant.process_message(request.message)
+        print(f"Assistant response: {assistant_response}")
+        print(f"Created tasks: {created_tasks}")
         
         return TaskResponse(
             success=True,

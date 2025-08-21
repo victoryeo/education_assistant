@@ -543,6 +543,7 @@ class EducationAssistant:
     def _extract_task_info(self, state: TaskState2) -> TaskState2:
         """Extract task information using LLM with RAG context"""
         print(f"Extracting task info: {state['user_input']}")
+        print(f"Retrieved content: {state['retrieved_content']}")
         extraction_prompt = """
         Extract task information from the user input, considering the retrieved educational content.
         
@@ -563,13 +564,14 @@ class EducationAssistant:
         
         User input: {user_input}
         """
-        print(extraction_prompt.format(user_input=state["user_input"]))
 
         # Format retrieved content for the prompt
         content_text = "\n\n".join([
             f"Source: {doc.metadata.get('source', 'unknown')}\nContent: {doc.page_content[:500]}..."
             for doc in state.get("retrieved_content", [])
         ])
+
+        print(extraction_prompt.format(user_input=state["user_input"], retrieved_content=content_text))
         
         try:
             print("Extracting task info...")

@@ -42,8 +42,8 @@ export default function Home() {
   const { data: session, status } = useSession();
 
   const assistants: Assistant[] = [
-    { id: 'student', name: 'Student Assistant', emoji: '🎓', color: 'bg-blue-100 hover:bg-blue-200' },
     { id: 'parent', name: 'Parent Assistant', emoji: '🏠', color: 'bg-green-100 hover:bg-green-200' },
+    { id: 'student', name: 'Student Assistant', emoji: '🎓', color: 'bg-blue-100 hover:bg-blue-200' },
   ];
 
   // Handle OAuth callback parameters
@@ -277,10 +277,10 @@ export default function Home() {
               </table>
             </div>
           </div>
-        ) : activeAssistant === 'student' ? (
-          <StudentAssistant onBack={handleBack} />
-        ) : (
+        ) : activeAssistant === 'parent' ? (
           <ParentAssistant onBack={handleBack} />
+        ) : (
+          <StudentAssistant onBack={handleBack} />
         )}
       </div>
     </div>

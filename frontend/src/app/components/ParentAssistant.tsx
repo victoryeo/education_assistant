@@ -302,18 +302,18 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
               <span className="text-sm font-medium">Send</span>
             </button>
           </div>
-          {/* Assistant's Response */}
-          {question && (
-            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-              <p className="text-gray-800">Question: {question}</p>
-            </div>
-          )}
-          {assistantMessages && (
-            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-              <p className="text-gray-800">Answer: {assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}</p>
-            </div>
-          )}          
         </form>
+        {/* Assistant's Response */}
+        {question && (
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+            <p className="text-gray-800">Question: {question}</p>
+          </div>
+        )}
+        {assistantMessages && (
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+            <p className="text-gray-800">Answer: {assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}</p>
+          </div>
+        )}          
       </div>
     </div>
   );

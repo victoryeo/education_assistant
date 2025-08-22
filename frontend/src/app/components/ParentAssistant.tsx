@@ -16,6 +16,7 @@ type AssistantProps = {
 
 export default function ParentAssistant({ onBack }: AssistantProps) {
   const [assistantMessages, setAssistantMessages] = useState<Message>(null);
+  const [question, setQuestion] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -144,7 +145,9 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    setQuestion(inputValue)
     setInputValue('');
+    setAssistantMessages(null)
 
     try {
       // Call the API to get assistant's response
@@ -300,9 +303,14 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
             </button>
           </div>
           {/* Assistant's Response */}
+          {question && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+              <p className="text-gray-800">Question: {question}</p>
+            </div>
+          )}
           {assistantMessages && (
             <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-              <p className="text-gray-800">{assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}</p>
+              <p className="text-gray-800">Answer: {assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}</p>
             </div>
           )}          
         </form>

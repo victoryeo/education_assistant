@@ -194,13 +194,7 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
             </button>
             <h1 className="text-xl font-bold">Parent Assistant</h1>
           </div>
-          <button
-            onClick={handleFetchTasks}
-            disabled={isLoadingTasks}
-            className="px-4 py-2 bg-white text-blue-600 rounded-md font-medium hover:bg-blue-50 disabled:opacity-50"
-          >
-            {isLoadingTasks ? 'Loading...' : 'My Tasks'}
-          </button>
+          
         </div>
       </div>
 

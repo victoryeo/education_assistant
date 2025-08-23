@@ -229,23 +229,19 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center min-h-screen w-full h-full bg-white">
-      <div className="w-full bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <h1 className="text-xl font-bold text-gray-800">AI Assistant</h1>
-            
-            {/* User Info Table */}
-            {userInfo && (
-              <div className="bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
-                <UserProfileTable userInfo={userInfo} onLogout={handleLogout} />
-              </div>
-            )}
+    <div className="flex flex-1 flex-col items-center min-h-screen max-w-1/2 h-full bg-white">
+      <div className="bg-white shadow-sm mx-auto px-4 sm:px-6 lg:px-8 flex justify-center h-16 items-center">
+        <h1 className="text-xl font-bold text-gray-800">AI Assistant</h1>
+        
+        {/* User Info Table */}
+        {userInfo && (
+          <div className="bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+            <UserProfileTable userInfo={userInfo} onLogout={handleLogout} />
           </div>
-        </div>
+        )}
       </div>
       
-      <div className="flex-1 flex flex-col justify-center items-center w-full max-w-4xl mx-auto py-12 px-4">
+      <div className="bg-white shadow-sm mx-auto px-4 sm:px-6 lg:px-8 flex justify-center h-16 items-center">
         <h1 className="text-4xl font-bold mb-16 text-center text-gray-800">
           Welcome to Your Education Assistant
         </h1>

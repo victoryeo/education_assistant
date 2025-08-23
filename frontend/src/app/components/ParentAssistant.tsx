@@ -310,9 +310,15 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
           </div>
         )}
         {assistantMessages && (
-          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-            <p className="text-gray-800">Answer: {assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}</p>
-          </div>
+          <table className="max-w-xl">
+            <tbody className="bg-white">
+            <tr>
+            <td key={assistantMessages.id} className="p-4 text-center">
+            Answer: {assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}
+            </td>
+            </tr>
+            </tbody>
+          </table>
         )}          
       </div>
     </div>

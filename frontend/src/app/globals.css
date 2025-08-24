@@ -74,4 +74,5 @@ a {
 
 .max-w-1\/2 {
   max-width: 50%;
+  min-width: 50%;
 }

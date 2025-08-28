@@ -809,6 +809,7 @@ class EducationAssistant:
         Extracted info: {state["extracted_info"]}        
         Provide an educational response that incorporates the retrieved learning materials.
         Offer insights, learning recommendations, and contextual information.
+        Limit the response to 100 words.
         """
         
         response = self.llm.invoke([HumanMessage(content=response_prompt)])

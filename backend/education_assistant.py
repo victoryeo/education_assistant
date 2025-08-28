@@ -591,9 +591,17 @@ class EducationAssistant:
                 raise Exception("No JSON match found")
             print(f"last match: {json_match[-1]}")
             if json_match:
-                extracted_info = json.loads(json_match[-1])
+                print(f"JSON match:1")
+                # Remove comments from JSON string before parsing
+                json_str = json_match[-1]
+                # Remove single-line comments
+                json_str = re.sub(r'//.*?$|#.*?$', '', json_str, flags=re.MULTILINE)
+                # Remove any remaining whitespace
+                json_str = json_str.strip()
+                extracted_info = json.loads(json_str)
             else:
                 # Fallback to basic extraction
+                print(f"JSON match:2")
                 extracted_info = self._basic_task_extraction(state["user_input"])
             
             state["extracted_info"] = extracted_info

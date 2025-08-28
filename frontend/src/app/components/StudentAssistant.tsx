@@ -15,6 +15,8 @@ type AssistantProps = {
 };
 
 export default function StudentAssistant({ onBack }: AssistantProps) {
+  const [assistantMessages, setAssistantMessages] = useState<Message>(null);
+  const [question, setQuestion] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -143,7 +145,9 @@ export default function StudentAssistant({ onBack }: AssistantProps) {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    setQuestion(inputValue)
     setInputValue('');
+    setAssistantMessages(null)
 
     try {
       // Call the API to get assistant's response
@@ -158,8 +162,10 @@ export default function StudentAssistant({ onBack }: AssistantProps) {
         sender: 'assistant',
         timestamp: new Date(response.timestamp),
       };
+      console.log(assistantMessage)
 
       setMessages((prev) => [...prev, assistantMessage]);
+      setAssistantMessages(assistantMessage)
 
       // Fetch tasks after getting assistant's response
       handleFetchTasks();
@@ -303,6 +309,23 @@ export default function StudentAssistant({ onBack }: AssistantProps) {
             </button>
           </div>
         </form>
+        {/* Assistant's Response */}
+        {question && (
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+            <p className="text-gray-800">Question: {question}</p>
+          </div>
+        )}
+        {assistantMessages && (
+          <table className="max-w-xl">
+            <tbody className="bg-white">
+            <tr>
+            <td key={assistantMessages.id} className="p-4 text-center">
+            Answer: {assistantMessages.text} - {assistantMessages.timestamp.toLocaleTimeString()}
+            </td>
+            </tr>
+            </tbody>
+          </table>
+        )}          
       </div>
     </div>
   );

@@ -196,8 +196,12 @@ class EducationAssistant:
             print("Found examdata data, loading...")
             examdata_docs = self._load_exam_data(examdata_path)
             if examdata_docs:
-                self.knowledge_store.add_documents(examdata_docs)
-        
+                try:
+                    self.knowledge_store.add_documents(examdata_docs)
+                    print(f"✅ Added {len(examdata_docs)} documents from exam data")
+                except Exception as e:
+                    print(f"❌ Failed to add exam data to knowledge store: {e}")
+
         # Define HuggingFace datasets to load
         datasets_config = [
             {

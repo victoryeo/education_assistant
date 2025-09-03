@@ -18,6 +18,7 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
   const [assistantMessages, setAssistantMessages] = useState<Message>(null);
   const [question, setQuestion] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [errorMessages, setErrorMessages] = useState<Message>(null);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -132,6 +133,9 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    // set error to null before sending a new message
+    setErrorMessages(null);
+
     if (!inputValue.trim()) return;
     
     setShowTasks(false); // Hide tasks when sending a new message
@@ -170,16 +174,17 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
       // Fetch tasks after getting assistant's response
       handleFetchTasks();
     } catch (error) {
-      console.error('Error getting response from assistant:', error);
+      console.error('Error getting response from assistant:', String(error));
       
       // Show error message to user
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: error.message,
+        text: String(error),
         sender: 'assistant',
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      console.error(errorMessage)
+      setErrorMessages(errorMessage);
     }
   };
 
@@ -304,6 +309,11 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
           </div>
         </form>
         {/* Assistant's Response */}
+        {errorMessages && (
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+            <p className="text-gray-800">Error: {errorMessages.text}</p>
+          </div>
+        )}        
         {question && (
           <div className="mt-2 p-3 bg-gray-50 rounded-lg">
             <p className="text-gray-800">Question: {question}</p>

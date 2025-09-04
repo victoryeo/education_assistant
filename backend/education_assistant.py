@@ -910,7 +910,12 @@ class EducationAssistant:
         )
         
         config = {"configurable": {"thread_id": f"{self.user_id}_{self.category}"}}
-        final_state = await self.workflow.ainvoke(initial_state, config)
+        try:
+            final_state = await self.workflow.ainvoke(initial_state, config)
+        except Exception as e:
+            print(f"ERROR: Error processing message: {e}")
+            traceback.print_exc()
+            return "", []
         
         self.conversation_history.append(HumanMessage(content=user_input))
         self.conversation_history.append(AIMessage(content=final_state["response"]))

@@ -14,10 +14,8 @@ uvicorn task_api:app --reload
 # For https
 uvicorn task_api:app --reload --port 8000 --ssl-keyfile localhost.key --ssl-certfile localhost.crt
 
-# Task assistants
-task_assistant : langchain
-task_assistant2 : langgraph + qdrant
-task_assistant3 : langgraph + pgvector
+# Education assistants
+education_assistant : langgraph + pgvector
 
 ### command to generate self signed certificate for localhost
 openssl req -x509 -out localhost.crt -keyout localhost.key \

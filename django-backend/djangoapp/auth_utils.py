@@ -5,29 +5,43 @@ from google.auth.transport import requests as google_requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from .mongodb_utils import get_user_by_email, create_user, update_user
 
 User = get_user_model()
 
-def get_or_create_user(google_user_data):
-    """Get or create a user from Google OAuth data."""
+async def get_or_create_user_mongodb(google_user_data):
+    """Get or create a user from Google OAuth data (async version for MongoDB)."""
     email = google_user_data.get('email')
     if not email:
         return None
-        
-    try:
-        user = User.objects.get(email=email)
+    
+    user = await get_user_by_email(email)
+    if user:
         # Update user data if needed
-        user.name = google_user_data.get('name', user.name)
-        user.picture = google_user_data.get('picture', user.picture)
-        user.save()
+        updates = {}
+        if 'name' in google_user_data and google_user_data['name'] != user.get('name'):
+            updates['name'] = google_user_data['name']
+        if 'picture' in google_user_data and google_user_data['picture'] != user.get('picture'):
+            updates['picture'] = google_user_data['picture']
+        
+        if updates:
+            user = await update_user(user['id'], updates)
         return user
-    except User.DoesNotExist:
+    else:
         # Create a new user
-        return User.objects.create_user(
-            email=email,
-            name=google_user_data.get('name', ''),
-            picture=google_user_data.get('picture', '')
-        )
+        user_data = {
+            'email': email,
+            'name': google_user_data.get('name', ''),
+            'picture': google_user_data.get('picture', ''),
+            'disabled': False
+        }
+        return await create_user(user_data)
+
+# Keep the original function for backward compatibility
+def get_or_create_user(google_user_data):
+    """Synchronous wrapper for get_or_create_user_async."""
+    import asyncio
+    return asyncio.run(get_or_create_user_async(google_user_data))
 
 def verify_google_token(token):
     """Verify Google OAuth token and return user data."""
@@ -47,10 +61,28 @@ def verify_google_token(token):
         return None
 
 def get_tokens_for_user(user):
-    """Generate JWT tokens for the user."""
+    """Generate JWT tokens for the user.
+    
+    Args:
+        user: Can be either a Django User model instance or a MongoDB user document
+    """
     from rest_framework_simplejwt.tokens import RefreshToken
     
-    refresh = RefreshToken.for_user(user)
+    # Handle both Django User model and MongoDB user document
+    if hasattr(user, 'id'):
+        # Django User model
+        user_id = str(user.id)
+        email = user.email
+        refresh = RefreshToken.for_user(user)
+    else:
+        # MongoDB user document
+        user_id = str(user['id'])
+        email = user['email']
+        refresh = RefreshToken()
+    
+    # Set custom claims
+    refresh['user_id'] = user_id
+    refresh['email'] = email
     
     return {
         'refresh': str(refresh),

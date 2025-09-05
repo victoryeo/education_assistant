@@ -1,17 +1,22 @@
 import json
 import threading
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, status, permissions, mixins
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework import status
+from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.viewsets import GenericViewSet
 from django.db.models import Q, Count, F, Case, When, Value, IntegerField
 from django.utils import timezone
 from datetime import timedelta
+import json
+from .mongodb_utils import get_user_by_email, create_user
+from asgiref.sync import sync_to_async
 
 from .models import Task, User, Student, Parent, TaskStatusHistory
 from .education_assistant import EducationManager
@@ -20,11 +25,75 @@ from .serializers import (
     TaskSerializer, TaskCreateSerializer, TaskUpdateSerializer,
     TaskSummarySerializer, GoogleAuthSerializer, CustomTokenObtainPairSerializer
 )
-from .auth_utils import verify_google_token, get_or_create_user, get_tokens_for_user
+from .auth_utils import verify_google_token, get_or_create_user_mongodb, get_tokens_for_user
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom token obtain view that includes user data in the response."""
     serializer_class = CustomTokenObtainPairSerializer
+
+class UserRegistrationView(APIView):
+    """View for user registration using MongoDB."""
+    permission_classes = [AllowAny]
+
+    async def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+            password = data.get('password')
+            name = data.get('name', '')
+            
+            if not email or not password:
+                return Response(
+                    {'error': 'Email and password are required'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user exists in MongoDB
+            existing_user = await get_user_by_email(email)
+            if existing_user:
+                return Response(
+                    {'error': 'User with this email already exists'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Create new user in MongoDB
+            user_data = {
+                'email': email,
+                'password': password,
+                'name': name,
+                'disabled': False
+            }
+            
+            created_user = await create_user(user_data)
+            if not created_user:
+                return Response(
+                    {'error': 'Failed to create user'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            # Return token pair on successful registration
+            tokens = await sync_to_async(get_tokens_for_user)(created_user)
+            return Response({
+                'message': 'User registered successfully',
+                'user': {
+                    'id': created_user['id'],
+                    'email': created_user['email'],
+                    'name': created_user.get('name', '')
+                },
+                **tokens
+            }, status=status.HTTP_201_CREATED)
+            
+        except json.JSONDecodeError:
+            return Response(
+                {'error': 'Invalid JSON'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class GoogleAuthView(APIView):
     """View for Google OAuth authentication."""

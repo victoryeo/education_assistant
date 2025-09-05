@@ -14,6 +14,8 @@ router.register(r'parent/tasks', views.ParentTaskViewSet, basename='parent-task'
 
 # API URL patterns
 api_patterns = [
+    # Authentication
+    path('register/', views.UserRegistrationView.as_view(), name='register'),
     path('token', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair_slash'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

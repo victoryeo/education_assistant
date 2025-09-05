@@ -16,9 +16,8 @@ python manage.py migrate
 
 # Run tests
 echo "Running tests..."
-#python manage.py test djangoapp.tests.test_authentication --verbosity=2
+python manage.py test djangoapp.tests.test_authentication --verbosity=2
 python manage.py test djangoapp.tests.test_tasks --verbosity=2
-#python manage.py test djangoapp.tests.test_parents --verbosity=2
-#python manage.py test djangoapp.tests.test_api --verbosity=2
+python manage.py test djangoapp.tests.test_parents --verbosity=2
 
 echo "Test complete!"

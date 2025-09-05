@@ -188,24 +188,31 @@ class ParentTaskViewSet(TaskViewSet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.assistant_manager = EducationManager()
-        self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=self.request.user.id)
+        self.parent_assistant = None
+
+    def get_parent_assistant(self):
+        if not self.parent_assistant and hasattr(self, 'request') and hasattr(self.request, 'user'):
+            self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=self.request.user.id)
+        return self.parent_assistant
 
     def create(self, request, *args, **kwargs):
         # Process the message if it exists in the request data
         message = request.data.get('message')
         if message:
             try:
-                # Process the message using the parent assistant
-                response = self.parent_assistant.process_message(message)
-                
-                # You can handle the response as needed
-                print(f"Processed message: {message}")
-                print(f"Assistant response: {response}")
-                
-                # Optionally add the assistant's response to the request data
-                if not isinstance(request.data, dict):
-                    request.data._mutable = True
-                request.data['assistant_response'] = str(response)
+                # Get the parent assistant and process the message
+                parent_assistant = self.get_parent_assistant()
+                if parent_assistant:
+                    response = parent_assistant.process_message(message)
+                    
+                    # You can handle the response as needed
+                    print(f"Processed message: {message}")
+                    print(f"Assistant response: {response}")
+                    
+                    # Optionally add the assistant's response to the request data
+                    if not isinstance(request.data, dict):
+                        request.data._mutable = True
+                    request.data['assistant_response'] = str(response)
                 
             except Exception as e:
                 print(f"Error processing message: {str(e)}")
@@ -216,6 +223,9 @@ class ParentTaskViewSet(TaskViewSet):
         return super().create(request, *args, **kwargs)
 
     def get_queryset(self):
+        # Initialize the parent assistant
+        self.get_parent_assistant()
+        
         # Get all tasks for the parent's children
         parent = Parent.objects.get(user=self.request.user)
         children = parent.children.all()

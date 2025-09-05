@@ -224,16 +224,18 @@ class ParentTaskViewSet(TaskViewSet):
 
     def get_queryset(self):
         # Initialize the parent assistant
-        self.get_parent_assistant()
-        
-        # Get all tasks for the parent's children
+        parent_assistant = self.get_parent_assistant()
+        tasks = parent_assistant.get_all_tasks()
+        return tasks
+
+        """# Get all tasks for the parent's children
         parent = Parent.objects.get(user=self.request.user)
         children = parent.children.all()
         
         return Task.objects.filter(
             assigned_to__in=[child.user for child in children],
             task_type='parent'
-        ).order_by('-created_at')
+        ).order_by('-created_at')"""
     
 @csrf_exempt
 def index(request):

@@ -16,11 +16,11 @@ class ParentAPITests(TestBase):
         from ..models import Task
         Task.objects.all().delete()
         
-        # Create tasks for the parent's child
+        # Create tasks for the parent's child with task_type='parent'
         self.task1 = Task.objects.create(
             title='Math Homework',
             description='Complete exercises 1-10',
-            task_type='student',
+            task_type='parent',
             created_by=self.parent_user,
             assigned_to=self.student_user,
             completed=False
@@ -28,7 +28,7 @@ class ParentAPITests(TestBase):
         self.task2 = Task.objects.create(
             title='Science Project',
             description='Work on the science project',
-            task_type='student',
+            task_type='parent',
             created_by=self.parent_user,
             assigned_to=self.student_user,
             completed=True
@@ -41,12 +41,18 @@ class ParentAPITests(TestBase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Should see both tasks for their child
-        self.assertEqual(len(response.data), 2)
+        # Get the response data, handling pagination if present
+        response_data = response.data
+        if 'results' in response_data:  # Handle paginated responses
+            response_data = response_data['results']
+            
+        # Should see both parent tasks for their child
+        self.assertEqual(len(response_data), 2, f"Expected 2 tasks, got {len(response_data)}. Response data: {response_data}")
         
-        # Verify the tasks are for the parent's child
-        for task in response.data:
+        # Verify the tasks are for the parent's child and have task_type='parent'
+        for task in response_data:
             self.assertEqual(task['assigned_to']['email'], 'student@example.com')
+            self.assertEqual(task['task_type'], 'parent')
     
     def test_parent_cannot_see_other_children_tasks(self):
         """Test that a parent can only see their own children's tasks."""
@@ -70,7 +76,7 @@ class ParentAPITests(TestBase):
         Task.objects.create(
             title='Private Task',
             description='Should not be visible',
-            task_type='student',
+            task_type='parent',
             created_by=other_student_user,
             assigned_to=other_student_user,
             completed=False
@@ -82,7 +88,15 @@ class ParentAPITests(TestBase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Should only see tasks for their own children (2 tasks we created in setUp)
-        self.assertEqual(len(response.data), 2)
-        for task in response.data:
+        # Get the response data, handling pagination if present
+        response_data = response.data
+        if 'results' in response_data:  # Handle paginated responses
+            response_data = response_data['results']
+        
+        # Should only see tasks for their own children (2 parent tasks we created in setUp)
+        self.assertEqual(len(response_data), 2, f"Expected 2 tasks, got {len(response_data)}. Response data: {response_data}")
+        
+        # Verify the tasks are for the parent's child and have task_type='parent'
+        for task in response_data:
             self.assertEqual(task['assigned_to']['email'], 'student@example.com')
+            self.assertEqual(task['task_type'], 'parent')

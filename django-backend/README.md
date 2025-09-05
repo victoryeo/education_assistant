@@ -39,12 +39,13 @@ This is the Django backend for the Education Assistant application, providing RE
 
 4. **Set up environment variables**
    ```bash
-   cp config.example .env
+   cp .env.sample .env
    # Edit .env with your configuration
    ```
 
 5. **Run database migrations**
    ```bash
+   python manage.py makemigrations
    python manage.py migrate
    ```
 
@@ -59,23 +60,23 @@ This is the Django backend for the Education Assistant application, providing RE
 python manage.py runserver
 ```
 
-The API will be available at `http://localhost:8000/api/v1/`
+The API will be available at `http://localhost:8000/`
 
 ## API Documentation
 
 ### Authentication
 
-- `POST /api/v1/auth/token/` - Obtain JWT token (email/password)
-- `POST /api/v1/auth/token/refresh/` - Refresh JWT token
-- `POST /api/v1/auth/google/` - Google OAuth login
+- `POST /token/` - Obtain JWT token (email/password)
+- `POST /token/refresh/` - Refresh JWT token
+- `POST /auth/google/` - Google OAuth login
 
 ### Tasks
 
-- `GET /api/v1/tasks/` - List all tasks (parent view)
-- `POST /api/v1/tasks/` - Create a new task
-- `GET /api/v1/student/tasks/` - List student's tasks
-- `POST /api/v1/student/tasks/<id>/complete/` - Mark task as complete/incomplete
-- `GET /api/v1/summary/` - Get task summary and statistics
+- `GET /tasks/` - List all tasks (parent view)
+- `POST /tasks/` - Create a new task
+- `GET /student/tasks/` - List student's tasks
+- `POST /student/tasks/<id>/complete/` - Mark task as complete/incomplete
+- `GET /summary/` - Get task summary and statistics
 
 ## Testing
 
@@ -87,7 +88,7 @@ python manage.py test
 
 ## Environment Variables
 
-Copy `config.example` to `.env` and update the following variables:
+Copy `.env.sample` to `.env` and update the following variables:
 
 - `SECRET_KEY`: Django secret key
 - `DATABASE_URL`: Database connection URL

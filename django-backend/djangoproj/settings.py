@@ -34,7 +34,7 @@ ALLOWED_HOSTS = ['*']  # For development only
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
-MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'education_assistant')
+MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'users_db')
 
 
 # Authentication backends

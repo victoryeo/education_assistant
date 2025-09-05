@@ -1,13 +1,43 @@
 from django.urls import path, include
-from . import views
 from rest_framework import routers
+from rest_framework_simplejwt.views import (
+    TokenRefreshView,
+    TokenVerifyView,
+)
+from . import views
 
+# Create a router for our API endpoints
 router = routers.DefaultRouter()
-router.register(r'tasks', views.StudentTaskViewSet)
+router.register(r'tasks', views.TaskViewSet, basename='task')
+router.register(r'student/tasks', views.StudentTaskViewSet, basename='student-task')
+router.register(r'parent/tasks', views.ParentTaskViewSet, basename='parent-task')
+
+# JWT authentication patterns
+jwt_patterns = [
+    path('token/', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+]
+
+# API URL patterns
+api_patterns = [
+    # Authentication
+    path('auth/', include(jwt_patterns)),
+    path('auth/google/', views.GoogleAuthView.as_view(), name='google_auth'),
+    
+    # Task management
+    path('tasks/summary/', views.TaskSummaryView.as_view(), name='task-summary'),
+    
+    # Include router URLs
+    path('', include(router.urls)),
+]
 
 urlpatterns = [
+    # API v1
+    path('api/v1/', include(api_patterns)),
+    
+    # Legacy endpoints (consider deprecating these in the future)
     path('', views.index, name="index"),
-    path('db_status/', views.db_status, name='db_status'),  # endpoint to check build status
-    path('build_db/', views.build_db, name='build_db'),  # endpoint to trigger DB building
-    path('student/tasks/', include(router.urls)),
-   ]
+    path('db_status/', views.db_status, name='db_status'),
+    path('build_db/', views.build_db, name='build_db'),
+]

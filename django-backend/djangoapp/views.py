@@ -1,17 +1,198 @@
-from django.http import JsonResponse
-import threading
-from django.views.decorators.csrf import csrf_exempt
 import json
-from rest_framework import viewsets
-from .models import Task
-from .serializers import StudentTaskSerializer
+import threading
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework import viewsets, status, permissions, mixins
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.viewsets import GenericViewSet
+from django.db.models import Q, Count, F, Case, When, Value, IntegerField
+from django.utils import timezone
+from datetime import timedelta
 
-class StudentTaskViewSet(viewsets.ModelViewSet):
+from .models import Task, User, Student, Parent, TaskStatusHistory
+from .serializers import (
+    UserSerializer, StudentSerializer, ParentSerializer,
+    TaskSerializer, TaskCreateSerializer, TaskUpdateSerializer,
+    TaskSummarySerializer, GoogleAuthSerializer, CustomTokenObtainPairSerializer
+)
+from .auth_utils import verify_google_token, get_or_create_user, get_tokens_for_user
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """Custom token obtain view that includes user data in the response."""
+    serializer_class = CustomTokenObtainPairSerializer
+
+class GoogleAuthView(APIView):
+    """View for Google OAuth authentication."""
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        serializer = GoogleAuthSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get user data from Google token
+        idinfo = serializer.validated_data
+        email = idinfo.get('email')
+        
+        # Get or create user
+        user = get_or_create_user(idinfo)
+        if not user:
+            return Response(
+                {"error": "Authentication failed"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Generate tokens
+        tokens = get_tokens_for_user(user)
+        return Response(tokens, status=status.HTTP_200_OK)
+
+class TaskViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    mixins.ListModelMixin,
+    GenericViewSet
+):
     """
-    API endpoint that allows tasks to be viewed, created, or edited.
+    API endpoint that allows tasks to be viewed, created, updated, or deleted.
     """
-    queryset = Task.objects.all()
-    serializer_class = StudentTaskSerializer
+    permission_classes = [IsAuthenticated]
+    serializer_class = TaskSerializer
+    
+    def get_queryset(self):
+        # Filter tasks where the user is either the creator or assignee
+        return Task.objects.filter(
+            Q(created_by=self.request.user) | Q(assigned_to=self.request.user)
+        ).order_by('-created_at')
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return TaskCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return TaskUpdateSerializer
+        return TaskSerializer
+    
+    # Removed perform_create as it's handled in the serializer
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """Mark a task as completed."""
+        task = self.get_object()
+        task.completed = True
+        task.save()
+        
+        # Record status change
+        TaskStatusHistory.objects.create(
+            task=task,
+            status=True,
+            changed_by=request.user,
+            notes="Task marked as completed"
+        )
+        
+        return Response(
+            {"status": "Task completed successfully"}, 
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=True, methods=['post'])
+    def uncomplete(self, request, pk=None):
+        """Mark a completed task as not completed."""
+        task = self.get_object()
+        task.completed = False
+        task.save()
+        
+        # Record status change
+        TaskStatusHistory.objects.create(
+            task=task,
+            status=False,
+            changed_by=request.user,
+            notes="Task marked as not completed"
+        )
+        
+        return Response(
+            {"status": "Task uncompleted successfully"}, 
+            status=status.HTTP_200_OK
+        )
+
+class TaskSummaryView(APIView):
+    """API endpoint to get task summary for the current user."""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Get task statistics
+        tasks = Task.objects.filter(
+            Q(created_by=request.user) | Q(assigned_to=request.user)
+        )
+        
+        total_tasks = tasks.count()
+        completed_tasks = tasks.filter(completed=True).count()
+        pending_tasks = total_tasks - completed_tasks
+        
+        completion_rate = (
+            (completed_tasks / total_tasks * 100) 
+            if total_tasks > 0 else 0
+        )
+        
+        # Get tasks by status
+        tasks_by_status = tasks.values('completed').annotate(
+            count=Count('id')
+        ).order_by('completed')
+        
+        # Convert to a more readable format
+        status_dict = {
+            'completed': 0,
+            'pending': 0
+        }
+        
+        for item in tasks_by_status:
+            if item['completed']:
+                status_dict['completed'] = item['count']
+            else:
+                status_dict['pending'] = item['count']
+        
+        # Get recent tasks
+        recent_tasks = tasks.order_by('-created_at')[:5]
+        
+        summary = {
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'pending_tasks': pending_tasks,
+            'completion_rate': round(completion_rate, 2),
+            'tasks_by_status': status_dict,
+            'recent_tasks': TaskSerializer(recent_tasks, many=True).data
+        }
+        
+        return Response(summary, status=status.HTTP_200_OK)
+
+class StudentTaskViewSet(TaskViewSet):
+    """
+    API endpoint for student-specific tasks.
+    """
+    def get_queryset(self):
+        # Only show tasks assigned to the student
+        return Task.objects.filter(
+            assigned_to=self.request.user,
+            task_type='student'
+        ).order_by('-created_at')
+
+class ParentTaskViewSet(TaskViewSet):
+    """
+    API endpoint for parent-specific tasks.
+    """
+    def get_queryset(self):
+        # Get all tasks for the parent's children
+        parent = Parent.objects.get(user=self.request.user)
+        children = parent.children.all()
+        
+        return Task.objects.filter(
+            assigned_to__in=[child.user for child in children],
+            task_type='parent'
+        ).order_by('-created_at')
     
 @csrf_exempt
 def index(request):
@@ -22,17 +203,24 @@ def index(request):
         # Extract the user's query from the POST data.
         query = request.POST.get('query')
         if not query:
-            body = json.loads(request.body)
-            print("body", body)
-            query = body
+            try:
+                body = json.loads(request.body)
+                query = body.get('query')
+            except (json.JSONDecodeError, AttributeError):
+                return JsonResponse(
+                    {"error": "Invalid JSON or query parameter"}, 
+                    status=400
+                )
         
-        resultJson = JsonResponse({"query": query})
-        print(resultJson)
-        print("return result")
-        return resultJson
+        # Here you would typically process the query and generate a response
+        # For now, just return the query as is
+        return JsonResponse({"query": query, "response": "This is a placeholder response"})
+    
     # For non-POST requests
-    else:
-        return JsonResponse({"query": query})
+    return JsonResponse(
+        {"message": "Send a POST request with a 'query' parameter"}, 
+        status=200
+    )
 
 @csrf_exempt
 def db_status(request):

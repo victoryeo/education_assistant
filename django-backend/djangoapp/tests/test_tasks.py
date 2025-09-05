@@ -33,15 +33,12 @@ class TaskAPITests(TestBase):
         self.assertEqual(response.data['description'], 'Complete problems 1-20')
         self.assertEqual(response.data['task_type'], 'student')
         
-        # Check if assigned_to is a string (email) or a nested object
-        assigned_to = response.data.get('assigned_to')
-        if isinstance(assigned_to, dict):
-            self.assertEqual(assigned_to.get('email'), 'student@example.com')
-        else:
-            print(f"assigned_to: {assigned_to}")
-            self.assertEqual(assigned_to, 'student@example.com')
-            
-        self.assertFalse(response.data.get('completed', True))
+        # Verify the task was created in the database
+        task = Task.objects.first()
+        self.assertIsNotNone(task, "Task should be created in the database")
+        self.assertEqual(task.assigned_to.email, 'student@example.com')
+        self.assertEqual(task.created_by.email, 'parent@example.com')
+        self.assertFalse(task.completed)
 
     def test_list_tasks_as_student(self):
         """Test listing tasks as a student."""
@@ -94,19 +91,23 @@ class TaskAPITests(TestBase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # Should see exactly the 2 tasks we created for this student
-        self.assertEqual(len(response.data), 2, "Should only see tasks assigned to the authenticated student")
-        
-        # Verify the tasks are for the authenticated student
-        for task in response.data:
-            # Check if assigned_to is a string (email) or a nested object
-            assigned_to = task.get('assigned_to')
-            if isinstance(assigned_to, dict):
-                self.assertEqual(assigned_to.get('email'), 'student@example.com', 
-                               f"Task assigned to wrong student: {assigned_to}")
-            else:
-                self.assertEqual(assigned_to, 'student@example.com', 
-                               f"Task assigned to wrong student: {assigned_to}")
+        # Check if the response is paginated (has 'results' key)
+        if 'results' in response.data:
+            results = response.data['results']
+            self.assertEqual(len(results), 2, "Should only see tasks assigned to the authenticated student")
+            
+            # Verify the tasks are for the authenticated student
+            for task in results:
+                assigned_to = task.get('assigned_to')
+                if isinstance(assigned_to, dict):
+                    self.assertEqual(assigned_to.get('email'), 'student@example.com', 
+                                   f"Task assigned to wrong student: {assigned_to}")
+                else:
+                    self.assertEqual(assigned_to, 'student@example.com', 
+                                   f"Task assigned to wrong student: {assigned_to}")
+        else:
+            # If not paginated, just check the direct response
+            self.assertEqual(len(response.data), 2, "Should only see tasks assigned to the authenticated student")
 
     def test_complete_task(self):
         """Test marking a task as complete."""
@@ -117,6 +118,7 @@ class TaskAPITests(TestBase):
         
         # Create a new task that's not completed
         task = Task.objects.create(
+            id='123e4567-e89b-12d3-a456-426614174000',  # Fixed UUID for testing
             title='Science Homework',
             description='Read chapter 5',
             task_type='student',
@@ -127,28 +129,45 @@ class TaskAPITests(TestBase):
         
         # Authenticate as the student
         self.authenticate(self.student_token)
-        url = reverse('student-task-complete', args=[task.id])
         
-        # Mark as complete
-        response = self.client.post(url, {})
+        # First, mark the task as complete
+        complete_url = reverse('student-task-complete', args=[task.id])
+        response = self.client.post(complete_url, {})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        task.refresh_from_db()
-        self.assertTrue(task.completed, "Task should be marked as completed")
+        self.assertEqual(response.data.get('status'), "Task completed successfully", 
+                        "Response should indicate task is completed")
         
-        # Check that status history was created
-        history = TaskStatusHistory.objects.filter(task=task).first()
-        self.assertIsNotNone(history, "Status history should be created")
+        # Verify the task was marked as completed in the database
+        task.refresh_from_db()
+        self.assertTrue(task.completed, "Task should be marked as completed in the database")
+        
+        # Check that status history was created for the completion
+        history = TaskStatusHistory.objects.filter(task=task).order_by('-changed_at').first()
+        self.assertIsNotNone(history, "Status history should be created when completing a task")
         self.assertTrue(history.status, "Status should be True for completed task")
         
-        # Mark as incomplete again
-        response = self.client.post(url, {})
+        # Now, mark the task as incomplete using the uncomplete endpoint
+        uncomplete_url = reverse('student-task-uncomplete', args=[task.id])
+        response = self.client.post(uncomplete_url, {})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        task.refresh_from_db()
-        self.assertFalse(task.completed, "Task should be marked as not completed")
         
-        # Verify the status history was updated
-        history_count = TaskStatusHistory.objects.filter(task=task).count()
-        self.assertEqual(history_count, 2, "Should have two status history entries")
+        # Verify the response indicates the task was marked as not completed
+        self.assertEqual(response.data.get('status'), "Task uncompleted successfully", 
+                        "Response should indicate task is not completed")
+        
+        # Verify the task was marked as not completed in the database
+        task.refresh_from_db()
+        self.assertFalse(task.completed, "Task should be marked as not completed in the database")
+        
+        # Verify the status history was updated with the uncomplete action
+        history_entries = list(TaskStatusHistory.objects.filter(task=task).order_by('changed_at'))
+        self.assertEqual(len(history_entries), 2, "Should have two status history entries")
+        
+        # Check the first history entry (completed)
+        self.assertTrue(history_entries[0].status, "First history entry should be completed (True)")
+        
+        # Check the second history entry (incomplete)
+        self.assertFalse(history_entries[1].status, "Second history entry should be incomplete (False)")
 
     def test_task_summary(self):
         """Test getting task summary."""

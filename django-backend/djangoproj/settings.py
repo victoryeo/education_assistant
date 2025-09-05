@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-@4kq@4psu&5g+l6x!u0ige0x7yjowbe+8hdb_z)a=r(wn75!&w'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']  # For development only
 
@@ -36,6 +36,12 @@ ALLOWED_HOSTS = ['*']  # For development only
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
 MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'education_assistant')
 
+
+# Authentication backends
+AUTHENTICATION_BACKENDS = [
+    'djangoapp.backends.MongoDBAuthenticationBackend',  # Our custom MongoDB backend
+    'django.contrib.auth.backends.ModelBackend',       # Default Django backend (kept as fallback)
+]
 
 # Application definition
 

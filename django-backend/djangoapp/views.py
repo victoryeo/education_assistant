@@ -14,6 +14,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .models import Task, User, Student, Parent, TaskStatusHistory
+from .education_assistant import EducationManager
 from .serializers import (
     UserSerializer, StudentSerializer, ParentSerializer,
     TaskSerializer, TaskCreateSerializer, TaskUpdateSerializer,
@@ -182,8 +183,38 @@ class StudentTaskViewSet(TaskViewSet):
 
 class ParentTaskViewSet(TaskViewSet):
     """
-    API endpoint for parent-specific tasks.
+    API endpoint for parent-specific tasks and assistant functionality.
     """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.assistant_manager = EducationManager()
+        self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=self.request.user.id)
+
+    def create(self, request, *args, **kwargs):
+        # Process the message if it exists in the request data
+        message = request.data.get('message')
+        if message:
+            try:
+                # Process the message using the parent assistant
+                response = self.parent_assistant.process_message(message)
+                
+                # You can handle the response as needed
+                print(f"Processed message: {message}")
+                print(f"Assistant response: {response}")
+                
+                # Optionally add the assistant's response to the request data
+                if not isinstance(request.data, dict):
+                    request.data._mutable = True
+                request.data['assistant_response'] = str(response)
+                
+            except Exception as e:
+                print(f"Error processing message: {str(e)}")
+                # Continue with task creation even if message processing fails
+                pass
+        
+        # Call the parent class's create method to handle the actual task creation
+        return super().create(request, *args, **kwargs)
+
     def get_queryset(self):
         # Get all tasks for the parent's children
         parent = Parent.objects.get(user=self.request.user)
@@ -250,8 +281,7 @@ def build_db(request):
     from `logic.py`, allowing the web server to continue handling other requests.
     This is particularly useful for initial setup or updating the database without downtime.
     """
-    # Start a new thread to build the database asynchronously.
-    thread = threading.Thread(target=build_vector_store)
+    thread = threading.Thread(target=build_database)
+    thread.daemon = True
     thread.start()
-    # Inform the requester that the database building process has started.
-    return JsonResponse({'status': 'Building database...'})
+    return JsonResponse({"status": "Database build started in the background"})

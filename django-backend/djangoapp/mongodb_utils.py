@@ -6,8 +6,8 @@ from bson import ObjectId
 from datetime import datetime
 
 # MongoDB connection setup
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-DB_NAME = "education_assistant"
+MONGODB_URI = settings.MONGODB_URI
+DB_NAME = settings.MONGODB_DB_NAME
 
 # For async operations
 async_client = AsyncIOMotorClient(

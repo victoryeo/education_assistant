@@ -33,8 +33,8 @@ api_patterns = [
 ]
 
 urlpatterns = [
-    # API v1
-    path('api/v1/', include(api_patterns)),
+    # API endpoints
+    *api_patterns,
     
     # Legacy endpoints (consider deprecating these in the future)
     path('', views.index, name="index"),

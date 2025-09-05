@@ -120,13 +120,38 @@ class TaskUpdateSerializer(serializers.ModelSerializer):
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
-        data = super().validate(attrs)
-        refresh = self.get_token(self.user)
-        data['refresh'] = str(refresh)
-        data['access'] = str(refresh.access_token)
+        # Get the email and password from the request
+        email = attrs.get('email') or attrs.get('username')
+        password = attrs.get('password')
         
-        # Add extra responses here
-        data['user'] = UserSerializer(self.user).data
+        if not email or not password:
+            raise serializers.ValidationError('Must include "email" and "password".')
+        
+        # Import here to avoid circular imports
+        from django.contrib.auth import authenticate
+        
+        # Authenticate using our custom backend
+        user = authenticate(
+            request=self.context.get('request'),
+            username=email,
+            password=password
+        )
+        
+        if not user:
+            raise serializers.ValidationError('Unable to log in with provided credentials.')
+        
+        # If authentication is successful, generate tokens
+        refresh = self.get_token(user)
+        data = {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user': {
+                'id': str(user.id) if hasattr(user, 'id') else None,
+                'email': user.email,
+                'name': getattr(user, 'name', '')
+            }
+        }
+        
         return data
 
 class GoogleAuthSerializer(serializers.Serializer):

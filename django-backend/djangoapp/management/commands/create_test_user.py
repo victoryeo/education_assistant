@@ -45,7 +45,7 @@ class Command(BaseCommand):
         return False
 
     def handle(self, *args, **options):
-        email = "vic@vic.com"
+        email = "test@test.com"
         password = "test123"  # In a real app, you'd want to generate a secure password
         name = "Test User"
         

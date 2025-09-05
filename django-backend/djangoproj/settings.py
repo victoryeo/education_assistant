@@ -39,7 +39,7 @@ MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'users_db')
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
-    'djangoapp.backends.MongoDBAuthenticationBackend',  # Our custom MongoDB backend
+    'djangoapp.mongodb_backends.MongoDBAuthenticationBackend',  # Our custom MongoDB backend
     'django.contrib.auth.backends.ModelBackend',       # Default Django backend (kept as fallback)
 ]
 

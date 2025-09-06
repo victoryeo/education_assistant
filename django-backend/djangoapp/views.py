@@ -328,14 +328,20 @@ class ParentTaskViewSet(TaskViewSet):
                 # Continue with task creation even if message processing fails
                 pass
         
-        # Ensure required fields are present
+        # Set default values for required fields if not provided
         if 'title' not in data:
-            data['title'] = data.get('message', 'New Task')[:100]  # Truncate to max_length if needed
-        
-        # Set default assigned_to to the current user if not provided
+            data['title'] = 'New Task'
+        if 'description' not in data:
+            data['description'] = data.get('message', 'New Task')[:100]
+        if 'task_type' not in data:
+            data['task_type'] = 'parent'
         if 'assigned_to' not in data and hasattr(request, 'user') and hasattr(request.user, 'email'):
             data['assigned_to'] = request.user.email
-        
+            
+        # Update request data with the processed data
+        request.data.update(data)
+        # Ensure the updated data is mutable
+        request._full_data = request.data.copy()
         try:
             # Call the parent class's create method to handle the actual task creation
             return super().create(request, *args, **kwargs)

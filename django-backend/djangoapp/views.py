@@ -344,13 +344,32 @@ class ParentTaskViewSet(TaskViewSet):
         request._full_data = request.data.copy()
         try:
             # Call the parent class's create method to handle the actual task creation
-            return super().create(request, *args, **kwargs)
+            response = super().create(request, *args, **kwargs)
+            
+            # If we have an assistant response, include it in the response
+            assistant_response = data.get('assistant_response')
+            if assistant_response:
+                if isinstance(response.data, dict):
+                    print("response data is dict")
+                    response.data['assistant_response'] = assistant_response
+                else:
+                    response.data = {
+                        **response.data,
+                        'assistant_response': assistant_response
+                    }
+            
+            return response
+            
         except Exception as e:
             print(f"Error in parent create method: {str(e)}")
             import traceback
             traceback.print_exc()
             return Response(
-                {"error": "Failed to create task", "details": str(e)},
+                {
+                    "error": "Failed to create task", 
+                    "details": str(e),
+                    "assistant_response": data.get('assistant_response', '')
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 

@@ -153,8 +153,6 @@ class TaskViewSet(
             return TaskUpdateSerializer
         return TaskSerializer
     
-    # Removed perform_create as it's handled in the serializer
-    
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         """Mark a task as completed."""
@@ -275,13 +273,11 @@ class ParentTaskViewSet(TaskViewSet):
 
     def create(self, request, *args, **kwargs):
         print(f"create ParentTaskViewSet")
-        # Make a shallow copy of the request data
-        data = request.data.copy()
-        
         # Process the message if it exists in the request data
-        message = data.get('message')
+        message = request.data.get('message')
         print(f"Received message: {message}")
-        
+        data = request.data.copy()
+        print(f"Request data: {data}")
         if message:
             try:
                 # Get the parent assistant and process the message
@@ -296,34 +292,61 @@ class ParentTaskViewSet(TaskViewSet):
                     
                     try:
                         # Run the async function and get the result
-                        response, tasks = loop.run_until_complete(
+                        result = loop.run_until_complete(
                             self.parent_assistant.process_message(message)
                         )
+                        
+                        # Handle the response - it should be a tuple of (response, tasks)
+                        if isinstance(result, tuple) and len(result) == 2:
+                            response, tasks = result
+                        else:
+                            # Fallback in case the response format is unexpected
+                            response = str(result) if result else ""
+                            tasks = []
                         
                         # Log the processing
                         print(f"Processed message: {message}")
                         print(f"Assistant response: {response}")
+                        print(f"Created tasks: {tasks}")
                         
                         # Add the assistant's response to the request data
                         data['assistant_response'] = str(response)
-                        data['created_tasks'] = tasks   
+                        data['created_tasks'] = tasks if isinstance(tasks, list) else []
+                    except Exception as e:
+                        print(f"Error in process_message: {str(e)}")
+                        data['assistant_response'] = "I encountered an error processing your request. Please try again."
+                        data['created_tasks'] = []
                     finally:
                         # Clean up the event loop
-                        loop.close()
+                        try:
+                            loop.close()
+                        except Exception as e:
+                            print(f"Error closing event loop: {str(e)}")
                 
             except Exception as e:
                 print(f"Error processing message: {str(e)}")
                 # Continue with task creation even if message processing fails
                 pass
         
-        # Update the request data with the modified data
-        request._full_data = data
-        if hasattr(request, 'data'):
-            request.data._mutable = True
-            request.data.update(data)
+        # Ensure required fields are present
+        if 'title' not in data:
+            data['title'] = data.get('message', 'New Task')[:100]  # Truncate to max_length if needed
         
-        # Call the parent class's create method to handle the actual task creation
-        return super().create(request, *args, **kwargs)
+        # Set default assigned_to to the current user if not provided
+        if 'assigned_to' not in data and hasattr(request, 'user') and hasattr(request.user, 'email'):
+            data['assigned_to'] = request.user.email
+        
+        try:
+            # Call the parent class's create method to handle the actual task creation
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            print(f"Error in parent create method: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": "Failed to create task", "details": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     def get_queryset(self):
         print(f"get_queryset ParentTaskViewSet")

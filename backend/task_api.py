@@ -397,7 +397,7 @@ async def auth_google_callback(request: Request):
             detail=f"Authentication failed: {str(e)}"
         )
 
-@app.post("/register")
+@app.post("/register/")
 async def register_user(user: UserCreate):  # Changed from User to UserCreate
     """
     Register a new user (alternative to OAuth)
@@ -443,7 +443,7 @@ async def register_user(user: UserCreate):  # Changed from User to UserCreate
             }
         )
 
-@app.post("/token", response_model=Token)
+@app.post("/token/", response_model=Token)
 async def login_for_access_token(email: str = Form(...), password: str = Form(...)):
     """
     OAuth2 password flow for token generation (alternative to Google OAuth)

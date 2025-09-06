@@ -149,6 +149,7 @@ class GoogleLoginView(APIView):
             # Generate redirect URI dynamically
             try:
                 redirect_uri = request.build_absolute_uri(reverse('auth_google_callback'))
+                redirect_uri = redirect_uri.rstrip('/')
                 print(f"GoogleLoginView - Generated redirect_uri: {redirect_uri}")
             except Exception as e:
                 print(f"GoogleLoginView - Error generating redirect URI: {str(e)}")

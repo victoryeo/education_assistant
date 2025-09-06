@@ -135,6 +135,7 @@ class TaskViewSet(
     serializer_class = TaskSerializer
     
     def get_queryset(self):
+        print(f"get_queryset TaskViewSet")
         # Filter tasks where the user is either the creator or assignee
         return Task.objects.filter(
             Q(created_by=self.request.user) | Q(assigned_to=self.request.user)
@@ -194,6 +195,7 @@ class TaskSummaryView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
+        print(f"get TaskSummaryView")
         # Get task statistics
         tasks = Task.objects.filter(
             Q(created_by=request.user) | Q(assigned_to=request.user)
@@ -244,6 +246,7 @@ class StudentTaskViewSet(TaskViewSet):
     API endpoint for student-specific tasks.
     """
     def get_queryset(self):
+        print(f"get_queryset StudentTaskViewSet")
         # Only show tasks assigned to the student
         return Task.objects.filter(
             assigned_to=self.request.user,
@@ -260,41 +263,54 @@ class ParentTaskViewSet(TaskViewSet):
         self.parent_assistant = None
 
     def get_parent_assistant(self):
+        print(f"get_parent_assistant")
         if not self.parent_assistant and hasattr(self, 'request') and hasattr(self.request, 'user'):
             self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=self.request.user.id)
         return self.parent_assistant
 
     def create(self, request, *args, **kwargs):
+        print(f"create ParentTaskViewSet")
+
+        # Make a shallow copy of the request data
+        data = request.data.copy()
+        
         # Process the message if it exists in the request data
-        message = request.data.get('message')
+        message = data.get('message')
+        print(f"Received message: {message}")
+        
         if message:
             try:
                 # Get the parent assistant and process the message
-                parent_assistant = self.get_parent_assistant()
-                if parent_assistant:
-                    response = parent_assistant.process_message(message)
+                self.parent_assistant = self.get_parent_assistant()
+                if self.parent_assistant:
+                    response = self.parent_assistant.process_message(message)
                     
-                    # You can handle the response as needed
+                    # Log the processing
                     print(f"Processed message: {message}")
                     print(f"Assistant response: {response}")
                     
-                    # Optionally add the assistant's response to the request data
-                    if not isinstance(request.data, dict):
-                        request.data._mutable = True
-                    request.data['assistant_response'] = str(response)
+                    # Add the assistant's response to the request data
+                    data['assistant_response'] = str(response)
                 
             except Exception as e:
                 print(f"Error processing message: {str(e)}")
                 # Continue with task creation even if message processing fails
                 pass
         
+        # Update the request data with the modified data
+        request._full_data = data
+        if hasattr(request, 'data'):
+            request.data._mutable = True
+            request.data.update(data)
+        
         # Call the parent class's create method to handle the actual task creation
         return super().create(request, *args, **kwargs)
 
     def get_queryset(self):
+        print(f"get_queryset ParentTaskViewSet")
         # Initialize the parent assistant
-        parent_assistant = self.get_parent_assistant()
-        tasks = parent_assistant.get_all_tasks()
+        self.parent_assistant = self.get_parent_assistant()
+        tasks = self.parent_assistant.get_all_tasks()
         return tasks
 
         """# Get all tasks for the parent's children

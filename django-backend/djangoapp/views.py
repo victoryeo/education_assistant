@@ -3,6 +3,11 @@ import threading
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, status, permissions, mixins
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from asgiref.sync import sync_to_async, async_to_sync
+from rest_framework.decorators import action
+from django.utils.decorators import method_decorator
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -270,7 +275,6 @@ class ParentTaskViewSet(TaskViewSet):
 
     def create(self, request, *args, **kwargs):
         print(f"create ParentTaskViewSet")
-
         # Make a shallow copy of the request data
         data = request.data.copy()
         
@@ -283,14 +287,29 @@ class ParentTaskViewSet(TaskViewSet):
                 # Get the parent assistant and process the message
                 self.parent_assistant = self.get_parent_assistant()
                 if self.parent_assistant:
-                    response = self.parent_assistant.process_message(message)
+                    # Run the async process_message in an event loop
+                    import asyncio
                     
-                    # Log the processing
-                    print(f"Processed message: {message}")
-                    print(f"Assistant response: {response}")
+                    # Create a new event loop for this thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
                     
-                    # Add the assistant's response to the request data
-                    data['assistant_response'] = str(response)
+                    try:
+                        # Run the async function and get the result
+                        response, tasks = loop.run_until_complete(
+                            self.parent_assistant.process_message(message)
+                        )
+                        
+                        # Log the processing
+                        print(f"Processed message: {message}")
+                        print(f"Assistant response: {response}")
+                        
+                        # Add the assistant's response to the request data
+                        data['assistant_response'] = str(response)
+                        data['created_tasks'] = tasks   
+                    finally:
+                        # Clean up the event loop
+                        loop.close()
                 
             except Exception as e:
                 print(f"Error processing message: {str(e)}")

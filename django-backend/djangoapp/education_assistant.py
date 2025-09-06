@@ -20,6 +20,7 @@ import re
 import json
 import uuid
 import traceback
+from bson import ObjectId
 from datasets import load_dataset
 
 load_dotenv()
@@ -261,46 +262,77 @@ class EducationAssistant:
                     
                 # Store in knowledge vector store
                 if documents:
+                    # First serialize all documents to handle UUIDs and other non-serializable types
+                    for doc in documents:
+                        try:
+                            # Ensure metadata exists
+                            if not hasattr(doc, 'metadata') or doc.metadata is None:
+                                doc.metadata = {}
+    
+                            # Handle ID
+                            if 'id' not in doc.metadata and '_id' in doc.metadata:
+                                doc.metadata['id'] = str(doc.metadata['_id'])
+                            elif 'id' not in doc.metadata:
+                                doc.metadata['id'] = str(uuid.uuid4())
+    
+                            # Ensure required fields
+                            if not hasattr(doc, 'page_content') and hasattr(doc, 'content'):
+                                doc.page_content = doc.content
+    
+                            # Convert UUIDs to strings in metadata
+                            if hasattr(doc, 'metadata') and doc.metadata:
+                                clean_metadata = {}
+                                for k, v in doc.metadata.items():
+                                    if isinstance(v, (uuid.UUID, ObjectId)):
+                                        clean_metadata[k] = str(v)
+                                    elif isinstance(v, dict):
+                                        # Handle nested dictionaries
+                                        clean_metadata[k] = {}
+                                        for nk, nv in v.items():
+                                            if isinstance(nv, (uuid.UUID, ObjectId)):
+                                                clean_metadata[k][nk] = str(nv)
+                                            elif isinstance(nv, datetime):
+                                                clean_metadata[k][nk] = nv.isoformat()
+                                        else:
+                                            clean_metadata[k][nk] = nv
+                            elif isinstance(v, datetime):
+                                clean_metadata[k] = v.isoformat()
+                            else:
+                                clean_metadata[k] = v
+                            doc.metadata = clean_metadata
+        
+                        except Exception as e:
+                            print(f"⚠️ Error processing document: {e}")
+                            continue
+
+                    # Store in knowledge vector store
                     try:
-                        # First serialize all documents to handle UUIDs and other non-serializable types
-                        serialized_docs = []
+                        # Convert to Document objects if they aren't already
+                        from langchain_core.documents import Document
+                        docs_to_store = []
+                        
                         for doc in documents:
                             try:
-                                # Convert document to dict if it's a document object
-                                if hasattr(doc, 'dict'):
-                                    doc_dict = doc.dict()
-                                elif hasattr(doc, '__dict__'):
-                                    doc_dict = doc.__dict__.copy()
+                                if not isinstance(doc, Document):
+                                    # Create a new Document with required fields
+                                    doc_obj = Document(
+                                        page_content=getattr(doc, 'page_content', ''),
+                                        metadata=getattr(doc, 'metadata', {})
+                                    )
+                                    docs_to_store.append(doc_obj)
                                 else:
-                                    doc_dict = dict(doc)
-                                
-                                # Clean up the metadata
-                                if 'metadata' in doc_dict and doc_dict['metadata']:
-                                    # Ensure metadata is serializable
-                                    clean_metadata = {}
-                                    for k, v in doc_dict['metadata'].items():
-                                        if isinstance(v, (uuid.UUID, ObjectId)):
-                                            clean_metadata[k] = str(v)
-                                        elif isinstance(v, datetime):
-                                            clean_metadata[k] = v.isoformat()
-                                        else:
-                                            clean_metadata[k] = v
-                                    doc_dict['metadata'] = clean_metadata
-                                
-                                serialized_docs.append(doc_dict)
-                                
-                            except Exception as doc_error:
-                                print(f"⚠️ Error processing document: {doc_error}")
+                                    docs_to_store.append(doc)
+                            except Exception as e:
+                                print(f"⚠️ Error creating Document object: {e}")
                                 continue
-                        
-                        if serialized_docs:
-                            self.knowledge_store.add_documents(serialized_docs)
-                            print(f"✅ Successfully stored {len(serialized_docs)} documents from {config['path']}")
+                
+                        if docs_to_store:
+                            self.knowledge_store.add_documents(docs_to_store)
+                            print(f"✅ Successfully stored {len(docs_to_store)} documents from {config['path']}")
                         else:
-                            print(f"⚠️ No valid documents to store for {config['path']}")
-                            
-                    except Exception as store_error:
-                        print(f"❌ Error storing documents: {store_error}")
+                            print("⚠️ No valid documents to store after processing")
+                    except Exception as e:
+                        print(f"❌ Error adding documents to vector store: {e}")
                         import traceback
                         traceback.print_exc()
                 else:

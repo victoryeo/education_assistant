@@ -22,7 +22,7 @@ from datetime import timedelta
 import json
 from .mongodb_utils import get_user_by_email, create_user
 from asgiref.sync import sync_to_async
-
+import os
 from .models import Task, User, Student, Parent, TaskStatusHistory
 from .education_assistant import EducationManager
 from .serializers import (
@@ -31,6 +31,7 @@ from .serializers import (
     TaskSummarySerializer, GoogleAuthSerializer, CustomTokenObtainPairSerializer
 )
 from .auth_utils import verify_google_token, get_or_create_user_mongodb, get_tokens_for_user
+from authlib.integrations.django_client import OAuth
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom token obtain view that includes user data in the response."""
@@ -120,10 +121,90 @@ class UserRegistrationView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+# Google OAuth2 config
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',  # Note: openid-configuration (with hyphen)
+    client_kwargs={
+        'scope': 'openid email profile'  # You can use short form with Authlib
+    }
+)
+
+print("GoogleOAuth2 config", GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
+class GoogleLoginView(APIView):
+    """View to initiate Google OAuth login."""
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        print("GoogleLoginView get")
+        # Generate redirect URI dynamically
+        redirect_uri = request.build_absolute_uri(reverse('auth_google_callback'))
+        print("GoogleLoginView get", redirect_uri)
+
+        # Generate authorization URL
+        authorization_url = oauth.google.create_authorization_url(redirect_uri)
+        print("GoogleLoginView get", authorization_url)
+
+        return Response({
+            'authorization_url': authorization_url['url'],
+            'state': authorization_url.get('state')
+        })
+
+class GoogleCallbackView(APIView):
+    """Handle Google OAuth callback."""
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        # Get authorization code from callback
+        code = request.GET.get('code')
+        state = request.GET.get('state')
+        
+        if not code:
+            return Response(
+                {'error': 'Authorization code not provided'}, 
+                status=400
+            )
+        
+        try:
+            # Exchange code for token
+            redirect_uri = request.build_absolute_uri(reverse('auth_google_callback'))
+            token = oauth.google.fetch_access_token(
+                redirect_uri=redirect_uri,
+                code=code
+            )
+            
+            # Get user info
+            user_info = oauth.google.get('userinfo', token=token).json()
+            
+            # Your logic to create/get user and generate tokens
+            # user = get_or_create_user(user_info)
+            # tokens = get_tokens_for_user(user)
+            
+            return Response({
+                'user_info': user_info,
+                'access_token': token.get('access_token')
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Authentication failed: {str(e)}'}, 
+                status=400
+            )
 
 class GoogleAuthView(APIView):
     """View for Google OAuth authentication."""
     permission_classes = [AllowAny]
+    
+    def get(self, request):
+        # Maybe return auth URL or instructions
+        return Response({"message": "Send POST request with Google token"})
     
     def post(self, request):
         serializer = GoogleAuthSerializer(data=request.data)

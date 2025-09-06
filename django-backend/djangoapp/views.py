@@ -32,6 +32,7 @@ from .serializers import (
 )
 from .auth_utils import verify_google_token, get_or_create_user_mongodb, get_tokens_for_user
 from authlib.integrations.django_client import OAuth
+from django.urls import reverse
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom token obtain view that includes user data in the response."""
@@ -136,26 +137,48 @@ oauth.register(
         'scope': 'openid email profile'  # You can use short form with Authlib
     }
 )
-
 print("GoogleOAuth2 config", GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
+
 class GoogleLoginView(APIView):
     """View to initiate Google OAuth login."""
     permission_classes = [AllowAny]
     
     def get(self, request):
-        print("GoogleLoginView get")
-        # Generate redirect URI dynamically
-        redirect_uri = request.build_absolute_uri(reverse('auth_google_callback'))
-        print("GoogleLoginView get", redirect_uri)
+        try:
+            print("GoogleLoginView - Starting OAuth flow")            
+            # Generate redirect URI dynamically
+            try:
+                redirect_uri = request.build_absolute_uri(reverse('auth_google_callback'))
+                print(f"GoogleLoginView - Generated redirect_uri: {redirect_uri}")
+            except Exception as e:
+                print(f"GoogleLoginView - Error generating redirect URI: {str(e)}")
+                raise
 
-        # Generate authorization URL
-        authorization_url = oauth.google.create_authorization_url(redirect_uri)
-        print("GoogleLoginView get", authorization_url)
-
-        return Response({
-            'authorization_url': authorization_url['url'],
-            'state': authorization_url.get('state')
-        })
+            # Generate authorization URL
+            try:
+                print("GoogleLoginView - Creating authorization URL...")
+                authorization_url = oauth.google.create_authorization_url(redirect_uri)
+                print(f"GoogleLoginView - authorization_url: {authorization_url}")
+                
+                if not authorization_url or 'url' not in authorization_url:
+                    print("GoogleLoginView - Invalid authorization URL response:", authorization_url)
+                    raise ValueError("Failed to generate authorization URL")
+                    
+                return Response({
+                    'authorization_url': authorization_url['url'],
+                    'state': authorization_url.get('state')
+                })
+                
+            except Exception as e:
+                print(f"GoogleLoginView - Error creating authorization URL: {str(e)}")
+                raise
+                
+        except Exception as e:
+            print(f"GoogleLoginView - Unhandled exception: {str(e)}")
+            return Response(
+                {'error': 'Failed to initiate Google login', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class GoogleCallbackView(APIView):
     """Handle Google OAuth callback."""

@@ -165,10 +165,15 @@ class GoogleLoginView(APIView):
                     print("GoogleLoginView - Invalid authorization URL response:", authorization_url)
                     raise ValueError("Failed to generate authorization URL")
                     
-                return Response({
-                    'authorization_url': authorization_url['url'],
-                    'state': authorization_url.get('state')
-                })
+                if request.GET.get('format') == 'json' or 'application/json' in request.META.get('HTTP_ACCEPT', ''):
+                    return Response({
+                        'authorization_url': authorization_url['url'],
+                        'state': authorization_url.get('state')
+                    })
+                else:
+                    # Redirect directly to Google (easier for browser testing)
+                    from django.http import HttpResponseRedirect
+                    return HttpResponseRedirect(authorization_url['url'])
                 
             except Exception as e:
                 print(f"GoogleLoginView - Error creating authorization URL: {str(e)}")
@@ -185,20 +190,40 @@ class GoogleCallbackView(APIView):
     """Handle Google OAuth callback."""
     permission_classes = [AllowAny]
     
+    def dispatch(self, request, *args, **kwargs):
+        print(f"GoogleCallbackView.dispatch() called - Method: {request.method}")
+        print(f"Full URL: {request.build_absolute_uri()}")
+        return super().dispatch(request, *args, **kwargs)
+    
     def get(self, request):
+        print("GoogleCallbackView.get() called!")
+        print(f"Request GET params: {request.GET}")
+        print(f"Full path: {request.get_full_path()}")
+        
         # Get authorization code from callback
         code = request.GET.get('code')
         state = request.GET.get('state')
+        error = request.GET.get('error')
+        
+        if error:
+            print(f"OAuth error: {error}")
+            return Response(
+                {'error': f'OAuth error: {error}'}, 
+                status=400
+            )
         
         if not code:
+            print("No authorization code provided")
             return Response(
-                {'error': 'Authorization code not provided'}, 
+                {'error': 'Authorization code not provided', 'received_params': dict(request.GET)}, 
                 status=400
             )
         
         try:
             # Exchange code for token
-            redirect_uri = request.build_absolute_uri(reverse('auth_google_callback'))
+            redirect_uri = request.build_absolute_uri('/auth/google/callback/').rstrip('/')
+            print(f"Using redirect URI: {redirect_uri}")
+            
             token = oauth.google.fetch_access_token(
                 redirect_uri=redirect_uri,
                 code=code
@@ -206,6 +231,7 @@ class GoogleCallbackView(APIView):
             
             # Get user info
             user_info = oauth.google.get('userinfo', token=token).json()
+            print(f"User info received: {user_info.get('email')}")
             
             # Your logic to create/get user and generate tokens
             # user = get_or_create_user(user_info)
@@ -213,43 +239,16 @@ class GoogleCallbackView(APIView):
             
             return Response({
                 'user_info': user_info,
-                'access_token': token.get('access_token')
+                'access_token': token.get('access_token'),
+                'message': 'Authentication successful'
             })
             
         except Exception as e:
+            print(f"Token exchange failed: {e}")
             return Response(
                 {'error': f'Authentication failed: {str(e)}'}, 
                 status=400
             )
-
-class GoogleAuthView(APIView):
-    """View for Google OAuth authentication."""
-    permission_classes = [AllowAny]
-    
-    def get(self, request):
-        # Maybe return auth URL or instructions
-        return Response({"message": "Send POST request with Google token"})
-    
-    def post(self, request):
-        serializer = GoogleAuthSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Get user data from Google token
-        idinfo = serializer.validated_data
-        email = idinfo.get('email')
-        
-        # Get or create user
-        user = get_or_create_user(idinfo)
-        if not user:
-            return Response(
-                {"error": "Authentication failed"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Generate tokens
-        tokens = get_tokens_for_user(user)
-        return Response(tokens, status=status.HTTP_200_OK)
 
 class TaskViewSet(
     mixins.CreateModelMixin,

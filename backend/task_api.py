@@ -476,7 +476,7 @@ async def root():
     return {"message": "Task Management API", "endpoints": ["/student/tasks", "/parent/tasks", "/student/summary", "/parent/summary"]}
 
 # Student Assistant Endpoints
-@app.post("/student/tasks", response_model=TaskResponse)
+@app.post("/student/tasks/", response_model=TaskResponse)
 async def create_student_tasks(request: TaskRequest, current_user: User = Depends(get_current_active_user)):
     try:
         student_assistant = task_manager.get_assistant('student', user_id=current_user.email)
@@ -525,7 +525,7 @@ async def get_student_summary(request: TaskRequest, current_user: User = Depends
         raise HTTPException(status_code=500, detail=f"Error getting student summary: {str(e)}")
 
 # Parent Assistant Endpoints
-@app.post("/parent/tasks", response_model=TaskResponse)
+@app.post("/parent/tasks/", response_model=TaskResponse)
 async def create_parent_tasks(request: TaskRequest, current_user: User = Depends(get_current_active_user)):
     try:
         parent_assistant = task_manager.get_assistant('parent', user_id=current_user.email)

@@ -143,8 +143,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # If authentication is successful, generate tokens
         refresh = self.get_token(user)
         data = {
+            'token_type': 'bearer',
             'refresh': str(refresh),
-            'access': str(refresh.access_token),
+            'access_token': str(refresh.access_token),
             'user': {
                 'id': str(user.id) if hasattr(user, 'id') else None,
                 'email': user.email,

@@ -40,8 +40,9 @@ class UserRegistrationView(APIView):
     """View for user registration using MongoDB."""
     permission_classes = [AllowAny]
 
-    async def post(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         try:
+            print("UserRegistrationView post")
             data = json.loads(request.body)
             email = data.get('email')
             password = data.get('password')
@@ -53,41 +54,61 @@ class UserRegistrationView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
+            import asyncio
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
             # Check if user exists in MongoDB
-            existing_user = await get_user_by_email(email)
-            if existing_user:
-                return Response(
-                    {'error': 'User with this email already exists'},
-                    status=status.HTTP_400_BAD_REQUEST
+            print("Check if user exists in MongoDB")
+            try:
+                # Run the async function and get the result
+                existing_user = loop.run_until_complete(
+                    get_user_by_email(email)
                 )
-            
-            # Create new user in MongoDB
-            user_data = {
-                'email': email,
-                'password': password,
-                'name': name,
-                'disabled': False
-            }
-            
-            created_user = await create_user(user_data)
-            if not created_user:
+                if existing_user:
+                    return Response(
+                        {'error': 'User with this email already exists'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # Create new user in MongoDB
+                user_data = {
+                    'email': email,
+                    'password': password,
+                    'name': name,
+                    'disabled': False
+                }
+                created_user = loop.run_until_complete(
+                    create_user(user_data)
+                )
+                if not created_user:
+                    return Response(
+                        {'error': 'Failed to create user'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+                # Return token pair on successful registration
+                tokens = get_tokens_for_user(created_user)
+                return Response({
+                    'message': 'User registered successfully',
+                    'user': {
+                        'id': created_user['id'],
+                        'email': created_user['email'],
+                        'name': created_user.get('name', '')
+                    },
+                    **tokens
+                }, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                print(f"Error checking user registration: {e}")
                 return Response(
-                    {'error': 'Failed to create user'},
+                    {'error': 'Failed to check user registration'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-            
-            # Return token pair on successful registration
-            tokens = await sync_to_async(get_tokens_for_user)(created_user)
-            return Response({
-                'message': 'User registered successfully',
-                'user': {
-                    'id': created_user['id'],
-                    'email': created_user['email'],
-                    'name': created_user.get('name', '')
-                },
-                **tokens
-            }, status=status.HTTP_201_CREATED)
-            
+            finally:
+                # Clean up the event loop
+                try:
+                    loop.close()
+                except Exception as e:
+                    print(f"Error closing event loop: {str(e)}")
         except json.JSONDecodeError:
             return Response(
                 {'error': 'Invalid JSON'},

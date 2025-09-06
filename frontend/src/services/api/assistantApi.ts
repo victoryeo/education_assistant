@@ -85,7 +85,7 @@ export const deleteTask = async (assistantType: 'student' | 'parent', taskId: st
 };
 
 export const chatWithAssistant = async (data: ChatRequest): Promise<ChatResponse> => {
-  const endpoint = data.assistant_type === 'student' ? '/student/tasks' : '/parent/tasks';
+  const endpoint = data.assistant_type === 'student' ? '/student/tasks/' : '/parent/tasks/';
   
   console.log('access_token', localStorage.getItem('access_token'))
   const response = await apiRequest<any>(endpoint, {

@@ -386,12 +386,14 @@ class ParentTaskViewSet(TaskViewSet):
     API endpoint for parent-specific tasks and assistant functionality.
     """
     def __init__(self, **kwargs):
+        print(f"__init__ ParentTaskViewSet")
         super().__init__(**kwargs)
         self.assistant_manager = EducationManager()
         self.parent_assistant = None
 
     def get_parent_assistant(self):
         print(f"get_parent_assistant")
+        print(f"self.parent_assistant: {self.parent_assistant}")
         if not self.parent_assistant and hasattr(self, 'request') and hasattr(self.request, 'user'):
             self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=self.request.user.id)
         return self.parent_assistant

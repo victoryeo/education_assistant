@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 from . import views
+from django.http import HttpResponse
 
 # Create a router for our API endpoints
 router = routers.DefaultRouter()
@@ -20,14 +21,16 @@ api_patterns = [
     path('token/', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair_slash'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
-    #path('auth/google/', views.GoogleAuthView.as_view(), name='google_auth'),
     path('auth/google/', views.GoogleLoginView.as_view(), name='auth_google'),
-    path('auth/google/callback/', views.GoogleCallbackView.as_view(), name='auth_google_callback'),
+    path('auth/google/callback', views.GoogleCallbackView.as_view(), name='auth_google_callback'),
     # Task management
     path('tasks/summary/', views.TaskSummaryView.as_view(), name='task-summary'),
     
     # Include router URLs
     path('', include(router.urls)),
+
+    # for testing
+    path('auth/google/callback/test', lambda request: HttpResponse("URL routing works!"), name='test'),
 ]
 
 urlpatterns = [

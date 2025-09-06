@@ -81,6 +81,7 @@ export default function Home() {
 
       if (accessToken) {
         // Store the tokens
+        console.log('Access token:', accessToken);
         localStorage.setItem('access_token', accessToken);
         localStorage.setItem('token_type', tokenType || 'bearer');
         

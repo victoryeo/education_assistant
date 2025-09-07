@@ -543,8 +543,8 @@ class ParentTaskViewSet(TaskViewSet):
         self.parent_assistant = self.get_parent_assistant()
         print(f"self.parent_assistant: {self.parent_assistant}")
         tasks = self.parent_assistant.get_all_tasks()
+        print(f"get_queryset tasks: {tasks}")
         return tasks
-
         """# Get all tasks for the parent's children
         parent = Parent.objects.get(user=self.request.user)
         children = parent.children.all()
@@ -553,6 +553,11 @@ class ParentTaskViewSet(TaskViewSet):
             assigned_to__in=[child.user for child in children],
             task_type='parent'
         ).order_by('-created_at')"""
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        return Response({
+            "tasks": queryset,
+        }, status=status.HTTP_200_OK)
     
 @csrf_exempt
 def index(request):

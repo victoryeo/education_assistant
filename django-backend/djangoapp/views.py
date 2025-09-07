@@ -377,17 +377,62 @@ class ParentTaskViewSet(TaskViewSet):
     """
     API endpoint for parent-specific tasks and assistant functionality.
     """
+    _assistant_cache = {}
+    _cache_timestamps = {}
+    CACHE_TIMEOUT = 3600  # 1 hour
+    
     def __init__(self, **kwargs):
         print(f"__init__ ParentTaskViewSet")
         super().__init__(**kwargs)
         self.assistant_manager = EducationManager()
         self.parent_assistant = None
 
-    def get_parent_assistant(self):
-        print(f"get_parent_assistant")
+    @classmethod
+    def _is_cache_valid(cls, user_id):
+        """Check if the cached assistant is still valid."""
+        import time
+        if user_id not in cls._cache_timestamps:
+            return False
+        result = (time.time() - cls._cache_timestamps[user_id]) < cls.CACHE_TIMEOUT
+        print(f"_is_cache_valid: {result}")
+        if (result == False):
+            cls._invalidate_user_cache(user_id)
+        return result
+
+    @classmethod
+    def _invalidate_user_cache(cls, user_id):
+        """Invalidate cache for a specific user."""
+        if user_id in cls._assistant_cache:
+            del cls._assistant_cache[user_id]
+        if user_id in cls._cache_timestamps:
+            del cls._cache_timestamps[user_id]
+
+    def old_get_parent_assistant(self):
         print(f"self.parent_assistant: {self.parent_assistant}")
         if not self.parent_assistant and hasattr(self, 'request') and hasattr(self.request, 'user'):
             self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=self.request.user.id)
+        return self.parent_assistant
+    def get_parent_assistant(self):
+        print(f"self.parent_assistant: {self.parent_assistant} {self.request.user.id}")
+        if not hasattr(self, 'request') or not hasattr(self.request, 'user'):
+            return None
+            
+        user_id = self.request.user.id
+        
+        # Check class-level cache
+        if user_id in self._assistant_cache and self._is_cache_valid(user_id):
+            self.parent_assistant = self._assistant_cache[user_id]
+            print(f"Retrieved parent assistant from class cache for user {user_id}")
+        else:
+            # Create new assistant and cache it
+            self.parent_assistant = self.assistant_manager.get_assistant('parent', user_id=user_id)
+            
+            # Cache at class level
+            import time
+            self._assistant_cache[user_id] = self.parent_assistant
+            self._cache_timestamps[user_id] = time.time()
+            print(f"Created and cached new parent assistant for user {user_id}")
+        
         return self.parent_assistant
 
     def create(self, request, *args, **kwargs):
@@ -496,6 +541,7 @@ class ParentTaskViewSet(TaskViewSet):
         print(f"get_queryset ParentTaskViewSet")
         # Initialize the parent assistant
         self.parent_assistant = self.get_parent_assistant()
+        print(f"self.parent_assistant: {self.parent_assistant}")
         tasks = self.parent_assistant.get_all_tasks()
         return tasks
 

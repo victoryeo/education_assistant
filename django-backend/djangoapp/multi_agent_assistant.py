@@ -50,7 +50,7 @@ class BaseAgent:
         self.llm = llm
         self.embeddings = embeddings
         self.db_connection_string = db_connection_string
-        self.collection_name = f"{collection_name}_{user_id}"
+        self.collection_name = f"tasks_{category}_{user_id}"
         self.knowledge_collection_name = f"knowledge_{category}_{user_id}"
         self.setup_pgvector_store()
     

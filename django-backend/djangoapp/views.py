@@ -5,24 +5,17 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, status, permissions, mixins
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from asgiref.sync import sync_to_async, async_to_sync
 from rest_framework.decorators import action
-from django.utils.decorators import method_decorator
-from rest_framework.decorators import action, api_view
-from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
-from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.viewsets import GenericViewSet
 from django.db.models import Q, Count, F, Case, When, Value, IntegerField
-from django.utils import timezone
-from datetime import timedelta
-import json
-from .mongodb_utils import get_user_by_email, create_user
-from asgiref.sync import sync_to_async
 import os
+from authlib.integrations.django_client import OAuth
+from django.urls import reverse
+from .mongodb_utils import get_user_by_email, create_user
 from .models import Task, User, Student, Parent, TaskStatusHistory
 from .education_assistant import EducationManager
 from .serializers import (
@@ -31,8 +24,6 @@ from .serializers import (
     TaskSummarySerializer, GoogleAuthSerializer, CustomTokenObtainPairSerializer
 )
 from .auth_utils import verify_google_token, get_or_create_user_mongodb, get_tokens_for_user
-from authlib.integrations.django_client import OAuth
-from django.urls import reverse
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom token obtain view that includes user data in the response."""

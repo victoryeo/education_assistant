@@ -2,10 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Task, User, Student, Parent, TaskStatusHistory
 from django.core.exceptions import ValidationError
-import re
 
 User = get_user_model()
 
@@ -154,26 +152,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
         
         return data
-
-class GoogleAuthSerializer(serializers.Serializer):
-    token = serializers.CharField()
-    
-    def validate_token(self, value):
-        try:
-            # Verify the Google token
-            idinfo = id_token.verify_oauth2_token(
-                value, 
-                google_requests.Request(),
-                GOOGLE_CLIENT_ID
-            )
-            
-            # Check if the token is valid
-            if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-                raise ValidationError('Wrong issuer.')
-                
-            return idinfo
-        except ValueError as e:
-            raise serializers.ValidationError('Invalid token')
 
 class TaskSummarySerializer(serializers.Serializer):
     total_tasks = serializers.IntegerField()

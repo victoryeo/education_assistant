@@ -21,7 +21,7 @@ from .education_assistant import EducationManager
 from .serializers import (
     UserSerializer, StudentSerializer, ParentSerializer,
     TaskSerializer, TaskCreateSerializer, TaskUpdateSerializer,
-    TaskSummarySerializer, GoogleAuthSerializer, CustomTokenObtainPairSerializer
+    TaskSummarySerializer, CustomTokenObtainPairSerializer
 )
 from .auth_utils import verify_google_token, get_or_create_user_mongodb, get_tokens_for_user
 

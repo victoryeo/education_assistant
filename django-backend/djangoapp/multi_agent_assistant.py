@@ -109,7 +109,20 @@ class TaskManagerAgent(BaseAgent):
         The new task shall include task title, task description, priority, deadline.
         Focus on task creation, deadlines, and priorities.
         
-        Respond in JSON format with extracted task details.
+        Respond in the following JSON format only. Do not include any other text or explanations:
+        
+        {{
+            "tasks": [
+                {{
+                    "title": "task title here",
+                    "description": "task description here", 
+                    "priority": "high|medium|low",
+                    "deadline": "YYYY-MM-DD or null"
+                }}
+            ]
+        }}
+        
+        JSON Response:
         """
         
         try:
@@ -815,7 +828,8 @@ class MultiAgentEducationAssistant:
             # First, find the collection_id for your logical collection_name
             cur.execute(f"SELECT uuid FROM langchain_pg_collection WHERE name = %s;", (self.collection_name,))
             collection_uuid_row = cur.fetchone()
-            
+            print("DEBUG: Collection Name: ", self.collection_name)
+            print("DEBUG: Collection UUID Row: ", collection_uuid_row)
             if not collection_uuid_row:
                 print(f"WARNING: Collection '{self.collection_name}' not found in langchain_pg_collection. No tasks to retrieve.")
                 cur.close()
@@ -826,7 +840,7 @@ class MultiAgentEducationAssistant:
 
             # Then, retrieve documents from langchain_pg_embedding for that collection_id
             # The metadata is stored in the 'cmetadata' column
-            cur.execute(f"SELECT cmetadata FROM langchain_pg_embedding WHERE collection_id = %s;", (str(collection_uuid),))
+            cur.execute(f"SELECT document FROM langchain_pg_embedding WHERE collection_id = %s;", (str(collection_uuid),))
             
             all_tasks_metadata = cur.fetchall()
             cur.close()
@@ -834,14 +848,26 @@ class MultiAgentEducationAssistant:
             
             tasks = []
             for row in all_tasks_metadata:
-                metadata = row[0] 
-                # The 'cmetadata' column in langchain_pg_embedding IS your metadata
-                # So it should contain 'id', 'category', 'user_id' directly.
-                if (metadata.get('category') == self.category and 
-                    metadata.get('user_id') == self.user_id):
-                    tasks.append(metadata)
+                document = row[0]
+                documentJson = json.loads(document)
+                print("DEBUG: Row: ", documentJson)
+                print("DEBUG: Category: ", documentJson['category'], self.category)
+                print("DEBUG: User ID: ", documentJson['user_id'], self.user_id)
+                # The 'document' column in langchain_pg_embedding IS your metadata
+                # So it should contain 'category', 'user_id' directly.
+                if documentJson['user_id'].strip() == str(self.user_id):
+                    print("User IDs match.")
                 else:
-                    print(f"DEBUG: Skipping task from DB due to category/user_id mismatch in cmetadata: {metadata}")
+                    print("User IDs do not match.")
+                if documentJson['category'] == self.category:
+                    print("Categories match.")
+                else:
+                    print("Categories do not match.")
+                if (documentJson['category'] == self.category and 
+                    documentJson['user_id'].strip() == str(self.user_id)):
+                    tasks.append(documentJson)
+                else:
+                    print(f"DEBUG: Skipping task from DB due to category/user_id mismatch in document: {documentJson}")
             
             print(f'DEBUG: Found {len(tasks)} total tasks in LangChain PGVector for {self.category}/{self.user_id}')
             return tasks

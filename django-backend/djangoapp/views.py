@@ -17,7 +17,8 @@ from authlib.integrations.django_client import OAuth
 from django.urls import reverse
 from .mongodb_utils import get_user_by_email, create_user
 from .models import Task, User, Student, Parent, TaskStatusHistory
-from .education_assistant import EducationManager
+#from .education_assistant import EducationManager
+from .multi_agent_assistant import EducationManager
 from .serializers import (
     UserSerializer, StudentSerializer, ParentSerializer,
     TaskSerializer, TaskCreateSerializer, TaskUpdateSerializer,

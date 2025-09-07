@@ -17,7 +17,7 @@ import re
 import json
 import uuid
 import traceback
-from datasets import load_dataset
+from bson import ObjectId
 
 load_dotenv()
 
@@ -43,20 +43,29 @@ class MultiAgentTaskState(TypedDict):
 
 # Base Agent class
 class BaseAgent:
-    def __init__(self, name: str, role: str, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, name: str, role: str, category: str, llm, embeddings, db_connection_string: str, collection_name: str):
         self.name = name
         self.role = role
+        self.category = category
         self.llm = llm
         self.embeddings = embeddings
         self.db_connection_string = db_connection_string
         self.collection_name = f"{collection_name}_{name}"
-        self.setup_vector_store()
+        self.knowledge_collection_name = f"knowledge_{category}_{name}"
+        self.setup_pgvector_store()
     
-    def setup_vector_store(self):
+    def setup_pgvector_store(self):
         """Setup vector store for this agent"""
         try:
             self.vector_store = PGVector(
                 collection_name=self.collection_name,
+                connection=self.db_connection_string,
+                embeddings=self.embeddings,
+                distance_strategy="cosine",
+                use_jsonb=True
+            )
+            self.knowledge_store = PGVector(
+                collection_name=self.knowledge_collection_name,
                 connection=self.db_connection_string,
                 embeddings=self.embeddings,
                 distance_strategy="cosine",
@@ -71,10 +80,12 @@ class BaseAgent:
 
 # Task Management Agent
 class TaskManagerAgent(BaseAgent):
-    def __init__(self, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category: str, llm, embeddings, db_connection_string: str, collection_name: str):
+        print("Setting up TaskManagerAgent")
         super().__init__(
             name="task_manager",
             role="Responsible for creating, updating, and managing tasks",
+            category=category,
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
@@ -134,10 +145,13 @@ class TaskManagerAgent(BaseAgent):
 
 # Educational Content Agent
 class EducationAgent(BaseAgent):
-    def __init__(self, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category: str, user_id: str, llm, embeddings, db_connection_string: str, collection_name: str):
+        print("Setting up EducationAgent")
+        self.user_id = user_id
         super().__init__(
             name="education_specialist",
             role="Provides educational context and learning recommendations",
+            category=category,
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
@@ -222,6 +236,26 @@ class EducationAgent(BaseAgent):
             examdata_docs = self._load_exam_data(examdata_path)
             if examdata_docs:
                 try:
+                    for doc in examdata_docs:
+                        # Ensure metadata exists
+                        if not hasattr(doc, 'metadata') or doc.metadata is None:
+                            doc.metadata = {}
+
+                        # Convert UUIDs to strings in metadata
+                        if hasattr(doc, 'metadata') and doc.metadata:
+                            clean_metadata = {}
+                            for k, v in doc.metadata.items():
+                                if isinstance(v, (uuid.UUID, ObjectId)):
+                                    clean_metadata[k] = str(v)
+                                elif isinstance(v, dict):
+                                    # Handle nested dictionaries
+                                    clean_metadata[k] = {}
+                                    for nk, nv in v.items():
+                                        if isinstance(nv, (uuid.UUID, ObjectId)):
+                                            clean_metadata[k][nk] = str(nv)
+                                        else:
+                                            clean_metadata[k][nk] = nv
+                            doc.metadata = clean_metadata
                     self.knowledge_store.add_documents(examdata_docs)
                     print(f"✅ Added {len(examdata_docs)} documents from exam data")
                 except Exception as e:
@@ -327,10 +361,11 @@ class EducationAgent(BaseAgent):
 
 # Scheduler Agent
 class SchedulerAgent(BaseAgent):
-    def __init__(self, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str):
         super().__init__(
             name="scheduler",
             role="Manages deadlines, priorities, and task scheduling",
+            category=category,
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
@@ -399,10 +434,11 @@ class SchedulerAgent(BaseAgent):
 
 # Coordinator Agent
 class CoordinatorAgent(BaseAgent):
-    def __init__(self, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str):
         super().__init__(
             name="coordinator",
             role="Coordinates between agents and synthesizes responses",
+            category=category,
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
@@ -484,15 +520,17 @@ class MultiAgentEducationAssistant:
             raise ValueError("GROQ_API_KEY is not set")
         
         # Setup embeddings
+        print("Setting up embeddings")
         self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         
         # Initialize agents
+        print("Setting up agents")
         collection_base = f"{category}_{user_id}"
         self.agents = {
-            "task_manager": TaskManagerAgent(self.llm, self.embeddings, self.db_connection_string, collection_base),
-            "education_specialist": EducationAgent(self.llm, self.embeddings, self.db_connection_string, collection_base),
-            "scheduler": SchedulerAgent(self.llm, self.embeddings, self.db_connection_string, collection_base),
-            "coordinator": CoordinatorAgent(self.llm, self.embeddings, self.db_connection_string, collection_base)
+            "task_manager": TaskManagerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base),
+            "education_specialist": EducationAgent(self.category, self.user_id, self.llm, self.embeddings, self.db_connection_string, collection_base),
+            "scheduler": SchedulerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base),
+            "coordinator": CoordinatorAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base)
         }
         
         # Task storage

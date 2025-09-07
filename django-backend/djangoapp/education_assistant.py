@@ -21,7 +21,6 @@ import json
 import uuid
 import traceback
 from bson import ObjectId
-from datasets import load_dataset
 
 load_dotenv()
 os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")

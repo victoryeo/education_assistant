@@ -81,6 +81,7 @@ class BaseAgent:
 # Task Management Agent
 class TaskManagerAgent(BaseAgent):
     def __init__(self, category: str, llm, embeddings, db_connection_string: str, collection_name: str, user_id: str):
+        self.user_id = user_id
         print("Setting up TaskManagerAgent")
         super().__init__(
             name="task_manager",
@@ -104,13 +105,15 @@ class TaskManagerAgent(BaseAgent):
         Current Intent: {intent}
         User Input: {user_input}
         
-        Based on the user input, extract task information and provide structured output.
-        Focus on task creation, updates, deadlines, and priorities.
+        Based on the user input, extract task information and if there is sufficient task information, create new task.
+        The new task shall include task title, task description, priority, deadline.
+        Focus on task creation, deadlines, and priorities.
         
         Respond in JSON format with extracted task details.
         """
         
         try:
+            print("Preparing task manager response with user_input: ", user_input)
             response = self.llm.invoke([HumanMessage(content=task_prompt)])
             
             # Extract JSON from response
@@ -120,10 +123,14 @@ class TaskManagerAgent(BaseAgent):
             else:
                 extracted_info = self._basic_extraction(user_input)
             
+            print("Extracted info: ", extracted_info)
             state["agent_outputs"][self.name] = {
                 "extracted_info": extracted_info,
                 "processing_result": "Task information extracted successfully"
             }
+
+            if extracted_info.get("tasks"):
+                self._create_task(extracted_info)
             
         except Exception as e:
             print(f"TaskManager error: {e}")
@@ -143,6 +150,36 @@ class TaskManagerAgent(BaseAgent):
                 "priority": "medium"
             }]
         }
+
+    def _create_task(self, extracted_info: Dict[str, Any]):
+        """Create new tasks with educational context"""
+        created_tasks = []
+        print(f"Creating tasks: {extracted_info}")
+
+        for task in extracted_info.get("tasks"):
+            task = {
+                'id': str(uuid.uuid4()),
+                'name': task.get('title', ''),
+                'description': task.get('description', ''),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'category': self.category,
+                'user_id': str(self.user_id),
+                'completed': False,
+            }
+            
+            # Add optional fields
+            if task.get('deadline'):
+                task['deadline'] = task['deadline']
+            if task.get('priority'):
+                task['priority'] = task['priority']
+            
+            # Add to vector store
+            print(f"Created task: {task}")
+            self.vector_store.add_documents([Document(page_content=json.dumps(task))])
+            created_tasks.append(task)
+    
+        return created_tasks
 
 # Educational Content Agent
 class EducationAgent(BaseAgent):

@@ -145,9 +145,10 @@ class TaskManagerAgent(BaseAgent):
 
 # Educational Content Agent
 class EducationAgent(BaseAgent):
-    def __init__(self, category: str, user_id: str, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category: str, user_id: str, llm, embeddings, db_connection_string: str, collection_name: str, role_prompt: str):
         print("Setting up EducationAgent")
         self.user_id = user_id
+        self.role_prompt = role_prompt
         super().__init__(
             name="education_specialist",
             role="Provides educational context and learning recommendations",
@@ -302,21 +303,24 @@ class EducationAgent(BaseAgent):
     def process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Process educational content requests"""
         user_input = state["user_input"]
-        
+        print("Preparing educational assistant response with user_input: ", user_input)
         # Retrieve relevant educational content
         try:
-            relevant_docs = self.vector_store.similarity_search(user_input, k=3)
+            relevant_docs = self.knowledge_store.similarity_search(user_input, k=3)
             
             education_prompt = f"""
-            You are an Education Specialist Agent. Analyze the user request and provide educational insights.
+            role prompt: {self.role_prompt}
+            
+            You are an Education Specialist Agent. Analyze the user request and provide educational insights according to role prompt.
             
             User Request: {user_input}
             
             Retrieved Educational Content:
             {self._format_documents(relevant_docs)}
             
-            Provide educational context, learning objectives, and recommendations.
-            Focus on how this relates to learning goals and educational best practices.
+            Provide an educational response that incorporates the retrieved learning materials.
+            Offer insights, learning recommendations, and contextual information.
+            Limit the response to 300 words.
             """
             
             response = self.llm.invoke([HumanMessage(content=education_prompt)])
@@ -362,6 +366,7 @@ class EducationAgent(BaseAgent):
 # Scheduler Agent
 class SchedulerAgent(BaseAgent):
     def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str):
+        print("SchedulerAgent initialized")
         super().__init__(
             name="scheduler",
             role="Manages deadlines, priorities, and task scheduling",
@@ -435,6 +440,7 @@ class SchedulerAgent(BaseAgent):
 # Coordinator Agent
 class CoordinatorAgent(BaseAgent):
     def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str):
+        print("CoordinatorAgent initialized")
         super().__init__(
             name="coordinator",
             role="Coordinates between agents and synthesizes responses",
@@ -528,7 +534,7 @@ class MultiAgentEducationAssistant:
         collection_base = f"{category}_{user_id}"
         self.agents = {
             "task_manager": TaskManagerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base),
-            "education_specialist": EducationAgent(self.category, self.user_id, self.llm, self.embeddings, self.db_connection_string, collection_base),
+            "education_specialist": EducationAgent(self.category, self.user_id, self.llm, self.embeddings, self.db_connection_string, collection_base, self.role_prompt),
             "scheduler": SchedulerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base),
             "coordinator": CoordinatorAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base)
         }

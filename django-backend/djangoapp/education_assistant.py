@@ -197,6 +197,26 @@ class EducationAssistant:
             examdata_docs = self._load_exam_data(examdata_path)
             if examdata_docs:
                 try:
+                    for doc in examdata_docs:
+                        # Ensure metadata exists
+                        if not hasattr(doc, 'metadata') or doc.metadata is None:
+                            doc.metadata = {}
+
+                        # Convert UUIDs to strings in metadata
+                        if hasattr(doc, 'metadata') and doc.metadata:
+                            clean_metadata = {}
+                            for k, v in doc.metadata.items():
+                                if isinstance(v, (uuid.UUID, ObjectId)):
+                                    clean_metadata[k] = str(v)
+                                elif isinstance(v, dict):
+                                    # Handle nested dictionaries
+                                    clean_metadata[k] = {}
+                                    for nk, nv in v.items():
+                                        if isinstance(nv, (uuid.UUID, ObjectId)):
+                                            clean_metadata[k][nk] = str(nv)
+                                        else:
+                                            clean_metadata[k][nk] = nv
+                            doc.metadata = clean_metadata
                     self.knowledge_store.add_documents(examdata_docs)
                     print(f"✅ Added {len(examdata_docs)} documents from exam data")
                 except Exception as e:

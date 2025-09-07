@@ -294,7 +294,7 @@ class EducationAgent(BaseAgent):
                             "loaded_at": datetime.now().isoformat()
                         })
                     
-                    self.vector_store.add_documents(documents)
+                    self.knowledge_store.add_documents(documents)
                     print(f"✅ EducationAgent loaded {len(documents)} documents from {config['path']}")
                     
                 except Exception as e:

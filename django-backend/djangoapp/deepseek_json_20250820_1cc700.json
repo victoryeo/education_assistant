@@ -1,0 +1,65 @@
+{
+  "class": "7A",
+  "students": [
+    {
+      "student_id": "S7A001",
+      "name": "Alice Chen",
+      "initial_personality": ["diligent", "perfectionist", "anxious"],
+      "math_scores": [
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 9, "max_score": 10, "timestamp": "2023-10-01T14:30:00Z", "completion_time_sec": 720},
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 10, "max_score": 10, "timestamp": "2023-10-02T15:05:00Z", "completion_time_sec": 680},
+        {"type": "Exam", "topic": "Mid-Term Algebra", "score": 92, "max_score": 100, "timestamp": "2023-10-15T09:00:00Z", "completion_time_sec": 2500},
+        {"type": "Exercise", "topic": "Geometry", "score": 8, "max_score": 10, "timestamp": "2023-10-20T14:15:00Z", "completion_time_sec": 950},
+        {"type": "Exercise", "topic": "Geometry", "score": 10, "max_score": 10, "timestamp": "2023-10-21T16:45:00Z", "completion_time_sec": 890}
+      ]
+    },
+    {
+      "student_id": "S7A002",
+      "name": "Ben Williams",
+      "initial_personality": ["active", "sociable", "distractible"],
+      "math_scores": [
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 6, "max_score": 10, "timestamp": "2023-10-01T14:55:00Z", "completion_time_sec": 310}, // Rushed
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 7, "max_score": 10, "timestamp": "2023-10-03T08:20:00Z", "completion_time_sec": 400}, // Done just before deadline
+        {"type": "Exam", "topic": "Mid-Term Algebra", "score": 78, "max_score": 100, "timestamp": "2023-10-15T09:00:00Z", "completion_time_sec": 1800}, // Finished early
+        {"type": "Exercise", "topic": "Geometry", "score": 5, "max_score": 10, "timestamp": "2023-10-25T17:55:00Z", "completion_time_sec": 280}, // Late submission, rushed
+        {"type": "Exercise", "topic": "Geometry", "score": 8, "max_score": 10, "timestamp": "2023-10-26T14:10:00Z", "completion_time_sec": 750}  // Improved after feedback?
+      ]
+    },
+    {
+      "student_id": "S7A003",
+      "name": "Chloe Garcia",
+      "initial_personality": ["lazy", "apathetic", "quiet"],
+      "math_scores": [
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 4, "max_score": 10, "timestamp": "2023-10-02T09:10:00Z", "completion_time_sec": 600}, // Low effort
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 3, "max_score": 10, "timestamp": "2023-10-03T14:32:00Z", "completion_time_sec": 580}, // Low effort
+        {"type": "Exam", "topic": "Mid-Term Algebra", "score": 45, "max_score": 100, "timestamp": "2023-10-15T09:00:00Z", "completion_time_sec": 1500}, // Gave up early
+        {"type": "Exercise", "topic": "Geometry", "score": 2, "max_score": 10, "timestamp": "2023-10-22T14:05:00Z", "completion_time_sec": 300}, // Didn't try
+        {"type": "Exercise", "topic": "Geometry", "score": 0, "max_score": 10, "timestamp": null, "completion_time_sec": null} // Missing submission
+      ]
+    },
+    {
+      "student_id": "S7A004",
+      "name": "David Kim",
+      "initial_personality": ["aggressive", "competitive", "frustrated"],
+      "math_scores": [
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 9, "max_score": 10, "timestamp": "2023-10-01T14:05:00Z", "completion_time_sec": 450}, // Very fast, high score
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 6, "max_score": 10, "timestamp": "2023-10-02T15:30:00Z", "completion_time_sec": 1200}, // Low score, high time -> frustration
+        {"type": "Exam", "topic": "Mid-Term Algebra", "score": 85, "max_score": 100, "timestamp": "2023-10-15T09:00:00Z", "completion_time_sec": 1900},
+        {"type": "Exercise", "topic": "Geometry", "score": 10, "max_score": 10, "timestamp": "2023-10-20T14:02:00Z", "completion_time_sec": 400}, // First to finish, perfect
+        {"type": "Exercise", "topic": "Geometry", "score": 7, "max_score": 10, "timestamp": "2023-10-21T14:40:00Z", "completion_time_sec": 1100} // Pattern of inconsistency
+      ]
+    },
+    {
+      "student_id": "S7A005",
+      "name": "Emma Patel",
+      "initial_personality": ["creative", "inquisitive", "slow-paced"],
+      "math_scores": [
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 7, "max_score": 10, "timestamp": "2023-10-01T16:10:00Z", "completion_time_sec": 1250},
+        {"type": "Exercise", "topic": "Algebra Basics", "score": 10, "max_score": 10, "timestamp": "2023-10-03T10:15:00Z", "completion_time_sec": 1350}, // High time, but perfect -> thorough
+        {"type": "Exam", "topic": "Mid-Term Algebra", "score": 88, "max_score": 100, "timestamp": "2023-10-15T09:00:00Z", "completion_time_sec": 2800}, // Used full time
+        {"type": "Exercise", "topic": "Geometry", "score": 8, "max_score": 10, "timestamp": "2023-10-20T16:30:00Z", "completion_time_sec": 1400},
+        {"type": "Exercise", "topic": "Geometry", "score": 9, "max_score": 10, "timestamp": "2023-10-22T11:20:00Z", "completion_time_sec": 1380}
+      ]
+    }
+  ]
+}

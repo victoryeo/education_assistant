@@ -216,7 +216,8 @@ class EducationAgent(BaseAgent):
                     'loaded_at': datetime.now().isoformat()
                 }
 
-                print(student_doc)
+                # disable print for now
+                #print(student_doc)
                 
                 documents.append(Document(**student_doc))
                 
@@ -615,6 +616,7 @@ class MultiAgentEducationAssistant:
     
     def _route_to_agents(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Determine routing strategy for agents"""
+        print("Routing to agents...")
         intent = state["intent"]
         user_input = state["user_input"].lower()
         
@@ -637,26 +639,31 @@ class MultiAgentEducationAssistant:
     
     def _task_manager_process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Process through Task Manager Agent"""
+        print("Processing through Task Manager Agent")
         state["current_agent"] = "task_manager"
         return self.agents["task_manager"].process(state)
     
     def _education_specialist_process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Process through Education Specialist Agent"""
+        print("Processing through Education Specialist Agent")
         state["current_agent"] = "education_specialist"
         return self.agents["education_specialist"].process(state)
     
     def _scheduler_process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Process through Scheduler Agent"""
+        print("Processing through Scheduler Agent")
         state["current_agent"] = "scheduler"
         return self.agents["scheduler"].process(state)
     
     def _coordinate_response(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Coordinate final response through Coordinator Agent"""
+        print("Processing through Coordinator Agent")
         state["current_agent"] = "coordinator"
         return self.agents["coordinator"].process(state)
     
     def _finalize_tasks(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
         """Finalize task operations based on agent outputs"""
+        print("Finalizing tasks...")
         task_manager_output = state["agent_outputs"].get("task_manager", {})
         extracted_info = task_manager_output.get("extracted_info", {})
         

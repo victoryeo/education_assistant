@@ -43,15 +43,15 @@ class MultiAgentTaskState(TypedDict):
 
 # Base Agent class
 class BaseAgent:
-    def __init__(self, name: str, role: str, category: str, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, name: str, role: str, category: str, llm, embeddings, db_connection_string: str, collection_name: str, user_id: str):
         self.name = name
         self.role = role
         self.category = category
         self.llm = llm
         self.embeddings = embeddings
         self.db_connection_string = db_connection_string
-        self.collection_name = f"{collection_name}_{name}"
-        self.knowledge_collection_name = f"knowledge_{category}_{name}"
+        self.collection_name = f"{collection_name}_{user_id}"
+        self.knowledge_collection_name = f"knowledge_{category}_{user_id}"
         self.setup_pgvector_store()
     
     def setup_pgvector_store(self):
@@ -80,7 +80,7 @@ class BaseAgent:
 
 # Task Management Agent
 class TaskManagerAgent(BaseAgent):
-    def __init__(self, category: str, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category: str, llm, embeddings, db_connection_string: str, collection_name: str, user_id: str):
         print("Setting up TaskManagerAgent")
         super().__init__(
             name="task_manager",
@@ -89,7 +89,8 @@ class TaskManagerAgent(BaseAgent):
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
-            collection_name=collection_name
+            collection_name=collection_name,
+            user_id=user_id
         )
     
     def process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
@@ -145,7 +146,7 @@ class TaskManagerAgent(BaseAgent):
 
 # Educational Content Agent
 class EducationAgent(BaseAgent):
-    def __init__(self, category: str, user_id: str, llm, embeddings, db_connection_string: str, collection_name: str, role_prompt: str):
+    def __init__(self, category: str, llm, embeddings, db_connection_string: str, collection_name: str, role_prompt: str, user_id: str):
         print("Setting up EducationAgent")
         self.user_id = user_id
         self.role_prompt = role_prompt
@@ -156,7 +157,8 @@ class EducationAgent(BaseAgent):
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
-            collection_name=collection_name
+            collection_name=collection_name,
+            user_id=user_id
         )
         self._load_educational_content()
     
@@ -366,7 +368,7 @@ class EducationAgent(BaseAgent):
 
 # Scheduler Agent
 class SchedulerAgent(BaseAgent):
-    def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str, user_id: str):
         print("SchedulerAgent initialized")
         super().__init__(
             name="scheduler",
@@ -375,7 +377,8 @@ class SchedulerAgent(BaseAgent):
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
-            collection_name=collection_name
+            collection_name=collection_name,
+            user_id=user_id
         )
     
     def process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
@@ -440,7 +443,7 @@ class SchedulerAgent(BaseAgent):
 
 # Coordinator Agent
 class CoordinatorAgent(BaseAgent):
-    def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str):
+    def __init__(self, category, llm, embeddings, db_connection_string: str, collection_name: str, user_id: str):
         print("CoordinatorAgent initialized")
         super().__init__(
             name="coordinator",
@@ -449,7 +452,8 @@ class CoordinatorAgent(BaseAgent):
             llm=llm,
             embeddings=embeddings,
             db_connection_string=db_connection_string,
-            collection_name=collection_name
+            collection_name=collection_name,
+            user_id=user_id
         )
     
     def process(self, state: MultiAgentTaskState) -> MultiAgentTaskState:
@@ -514,6 +518,7 @@ class MultiAgentEducationAssistant:
         self.role_prompt = role_prompt
         self.category = category
         self.user_id = user_id
+        self.collection_name = f"tasks_{category}_{user_id}" # Used as table name
         self.db_connection_string = os.getenv("SUPABASE_DB_CONNECTION_STRING")
         
         if not self.db_connection_string:
@@ -534,10 +539,10 @@ class MultiAgentEducationAssistant:
         print("Setting up agents")
         collection_base = f"{category}_{user_id}"
         self.agents = {
-            "task_manager": TaskManagerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base),
-            "education_specialist": EducationAgent(self.category, self.user_id, self.llm, self.embeddings, self.db_connection_string, collection_base, self.role_prompt),
-            "scheduler": SchedulerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base),
-            "coordinator": CoordinatorAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base)
+            "task_manager": TaskManagerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base, self.user_id),
+            "education_specialist": EducationAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base, self.role_prompt, self.user_id),
+            "scheduler": SchedulerAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base, self.user_id),
+            "coordinator": CoordinatorAgent(self.category, self.llm, self.embeddings, self.db_connection_string, collection_base, self.user_id)
         }
         
         # Task storage
@@ -763,6 +768,55 @@ class MultiAgentEducationAssistant:
         }
         
         return summary
+
+    def _get_all_tasks_from_vector_store(self) -> List[Dict[str, Any]]:
+        """Get all tasks from PGVector, filtered by category and user_id"""
+        try:
+            conn = psycopg2.connect(self.db_connection_string)
+            cur = conn.cursor()
+
+            # First, find the collection_id for your logical collection_name
+            cur.execute(f"SELECT uuid FROM langchain_pg_collection WHERE name = %s;", (self.collection_name,))
+            collection_uuid_row = cur.fetchone()
+            
+            if not collection_uuid_row:
+                print(f"WARNING: Collection '{self.collection_name}' not found in langchain_pg_collection. No tasks to retrieve.")
+                cur.close()
+                conn.close()
+                return []
+
+            collection_uuid = collection_uuid_row[0]
+
+            # Then, retrieve documents from langchain_pg_embedding for that collection_id
+            # The metadata is stored in the 'cmetadata' column
+            cur.execute(f"SELECT cmetadata FROM langchain_pg_embedding WHERE collection_id = %s;", (str(collection_uuid),))
+            
+            all_tasks_metadata = cur.fetchall()
+            cur.close()
+            conn.close()
+            
+            tasks = []
+            for row in all_tasks_metadata:
+                metadata = row[0] 
+                # The 'cmetadata' column in langchain_pg_embedding IS your metadata
+                # So it should contain 'id', 'category', 'user_id' directly.
+                if (metadata.get('category') == self.category and 
+                    metadata.get('user_id') == self.user_id):
+                    tasks.append(metadata)
+                else:
+                    print(f"DEBUG: Skipping task from DB due to category/user_id mismatch in cmetadata: {metadata}")
+            
+            print(f'DEBUG: Found {len(tasks)} total tasks in LangChain PGVector for {self.category}/{self.user_id}')
+            return tasks
+        except Exception as e:
+            print(f"ERROR: Error getting all tasks from LangChain PGVector (direct query): {e}")
+            traceback.print_exc()
+            return [t for t in self.tasks if t.get('user_id') == self.user_id and t.get('category') == self.category]
+
+    def get_all_tasks(self) -> List[Dict[str, Any]]:
+        """Get all tasks, refreshed from vector store"""
+        self.tasks = self._get_all_tasks_from_vector_store()
+        return self.tasks
 
 class EducationManager:
     def __init__(self):

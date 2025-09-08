@@ -1003,6 +1003,90 @@ class MultiAgentEducationAssistant:
             'completed_at': datetime.now().isoformat()
         })
 
+    def delete_task(self, task_id: str) -> bool:
+        """
+        Delete a task from the vector store.
+        
+        Args:
+            task_id: The ID of the task to delete
+            
+        Returns:
+            bool: True if deletion was successful, False otherwise
+        """
+        print(f"delete_task called for task_id: {task_id}")
+        try:
+            # Get the task manager agent
+            task_manager = self.agents.get('task_manager')
+            if not task_manager or not hasattr(task_manager, 'vector_store'):
+                print("ERROR: Task manager or its vector store not available")
+                return False
+                
+            # First verify the task exists
+            task = self.get_task_by_id(task_id)
+            if not task:
+                print(f"Task {task_id} not found")
+                return False
+                
+            # Delete from vector store
+            try:
+                # Try to delete using the vector store's delete method
+                task_manager.vector_store.delete(
+                    filter_={"id": str(task_id)}
+                )
+                print(f"Successfully deleted task {task_id}")
+                return True
+                
+            except Exception as e:
+                print(f"Error deleting task {task_id} from vector store: {str(e)}")
+                # Fall back to direct SQL delete
+                try:
+                    conn = psycopg2.connect(self.db_connection_string)
+                    cur = conn.cursor()
+                    
+                    # Get collection UUID
+                    cur.execute("""
+                        SELECT uuid FROM langchain_pg_collection 
+                        WHERE name = %s;
+                    """, (self.collection_name,))
+                    
+                    collection_uuid_row = cur.fetchone()
+                    if not collection_uuid_row:
+                        print(f"Collection {self.collection_name} not found")
+                        return False
+                        
+                    collection_uuid = collection_uuid_row[0]
+                    
+                    # Delete the task
+                    delete_sql = """
+                        DELETE FROM langchain_pg_embedding 
+                        WHERE collection_id = %s::uuid 
+                        AND (document::jsonb)->>'id' = %s::text;
+                    """
+                    cur.execute(delete_sql, (str(collection_uuid), str(task_id)))
+                    conn.commit()
+                    
+                    if cur.rowcount > 0:
+                        print(f"Successfully deleted task {task_id} via direct SQL")
+                        return True
+                    else:
+                        print(f"No task found with ID {task_id}")
+                        return False
+                        
+                except Exception as sql_error:
+                    print(f"Error in direct SQL delete: {str(sql_error)}")
+                    traceback.print_exc()
+                    return False
+                finally:
+                    if 'cur' in locals():
+                        cur.close()
+                    if 'conn' in locals():
+                        conn.close()
+                        
+        except Exception as e:
+            print(f"Unexpected error in delete_task: {str(e)}")
+            traceback.print_exc()
+            return False
+
 class EducationManager:
     def __init__(self):
         # A nested dictionary to store assistants:

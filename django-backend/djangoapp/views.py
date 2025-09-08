@@ -559,6 +559,47 @@ class ParentTaskViewSet(TaskViewSet):
             "tasks": queryset,
         }, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['put', 'delete'], url_path='delete')
+    def delete_task(self, request, pk=None):
+        """
+        Delete a specific task.
+        URL: DELETE /parent/tasks/{task_id}/delete/
+        """
+        print(f"delete_task called for task ID: {pk}")
+        try:
+            parent_assistant = self.get_parent_assistant()
+            if not parent_assistant:
+                return Response(
+                    {"error": "Parent assistant not available"}, 
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            
+            # Delete the task
+            # Note: You'll need to implement delete_task in MultiAgentEducationAssistant
+            success = parent_assistant.delete_task(pk)
+            
+            if not success:
+                return Response(
+                    {"error": "Failed to delete task"}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            return Response(
+                {"success": True, "message": "Task deleted successfully"},
+                status=status.HTTP_204_NO_CONTENT
+            )
+            
+        except Exception as e:
+            print(f"Error in delete_task: {str(e)}")
+            return Response(
+                {
+                    "error": "Failed to delete task", 
+                    "details": str(e),
+                    "task_id": pk
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=['put'], url_path='complete')
     def complete_task(self, request, pk=None):
         """

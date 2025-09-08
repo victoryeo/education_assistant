@@ -898,8 +898,8 @@ class MultiAgentEducationAssistant:
                 collection_uuid = collection_uuid_row[0]
                 print(f"DEBUG: Attempting direct SQL DELETE for collection {self.collection_name} ({collection_uuid}) and task_id {task_id}.")
                 
-                delete_sql = f"DELETE FROM langchain_pg_embedding WHERE collection_id = %s AND cmetadata->>'id' = %s;"
-                cur.execute(delete_sql, (str(collection_uuid), task_id))
+                delete_sql = f"DELETE FROM langchain_pg_embedding WHERE collection_id = %s::uuid AND (document::jsonb)->>'id' = %s::text;"
+                cur.execute(delete_sql, (str(collection_uuid), str(task_id)))
                 rows_deleted = cur.rowcount
                 conn.commit() # <<< Explicit COMMIT is crucial for direct SQL
                 print(f"DEBUG: Direct SQL DELETE completed. Rows deleted: {rows_deleted} for task ID {task_id}.")

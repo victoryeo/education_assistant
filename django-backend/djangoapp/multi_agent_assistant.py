@@ -881,6 +881,123 @@ class MultiAgentEducationAssistant:
         self.tasks = self._get_all_tasks_from_vector_store()
         return self.tasks
 
+    def _update_task_in_vector_store(self, task: Dict[str, Any]):
+        task_id = str(task['id'])
+        print(f"DEBUG: _update_task_in_vector_store START for task_id: {task_id}")
+        
+        # --- Direct SQL Delete Approach (if LangChain's delete fails) ---
+        try:
+            conn = psycopg2.connect(self.db_connection_string)
+            cur = conn.cursor()
+            
+            # Get the collection UUID (needed to filter rows belonging to this logical collection)
+            cur.execute(f"SELECT uuid FROM langchain_pg_collection WHERE name = %s;", (self.collection_name,))
+            collection_uuid_row = cur.fetchone()
+            
+            if collection_uuid_row:
+                collection_uuid = collection_uuid_row[0]
+                print(f"DEBUG: Attempting direct SQL DELETE for collection {self.collection_name} ({collection_uuid}) and task_id {task_id}.")
+                
+                delete_sql = f"DELETE FROM langchain_pg_embedding WHERE collection_id = %s AND cmetadata->>'id' = %s;"
+                cur.execute(delete_sql, (str(collection_uuid), task_id))
+                rows_deleted = cur.rowcount
+                conn.commit() # <<< Explicit COMMIT is crucial for direct SQL
+                print(f"DEBUG: Direct SQL DELETE completed. Rows deleted: {rows_deleted} for task ID {task_id}.")
+                if rows_deleted == 0:
+                    print(f"WARNING: Direct SQL delete found 0 rows for task ID {task_id}. Check ID, collection, or if already deleted.")
+            else:
+                print(f"WARNING: Collection '{self.collection_name}' not found during direct SQL delete attempt. No delete performed.")
+
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"ERROR: Exception during direct SQL delete for task {task_id}: {e}")
+            traceback.print_exc()
+            # If deletion failed, you might still want to try to add the new version.
+
+        # --- Add the updated document ---
+        print(f"DEBUG: Calling _add_task_to_vector_store for task_id: {task_id} after delete attempt.")
+        self.vector_store.add_documents([Document(page_content=json.dumps(task))])
+        print(f"DEBUG: _update_task_in_vector_store END for task_id: {task_id}")
+
+    def get_task_by_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves a task by its ID, check LangChain PGVector.
+        """
+        # Search LangChain PGVector directly using the ID in metadata
+        print(f"DEBUG: Searching LangChain PGVector for collection: {self.collection_name}")
+        try:
+            conn = psycopg2.connect(self.db_connection_string)
+            cur = conn.cursor()
+            
+            # Find the collection_id for your logical collection_name
+            cur.execute(f"SELECT uuid FROM langchain_pg_collection WHERE name = %s;", (self.collection_name,))
+            collection_uuid_row = cur.fetchone()
+            
+            if not collection_uuid_row:
+                print(f"WARNING: Collection '{self.collection_name}' not found during get_task_by_id.")
+                cur.close()
+                conn.close()
+                return None
+            
+            collection_uuid = collection_uuid_row[0]
+
+            # Query langchain_pg_embedding table, filtering by collection_id and metadata->>'id'
+            cur.execute(f"SELECT document FROM langchain_pg_embedding WHERE collection_id = %s AND document->>'id' = %s LIMIT 1;", 
+                        (str(collection_uuid), task_id))
+            
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+            if result and result[0]:
+                found_task = result[0] # cmetadata is the first (and only) column selected
+                print(f"DEBUG: Task {task_id} found in LangChain PGVector.")
+                return found_task
+            else:
+                print(f"DEBUG: Task {task_id} not found in LangChain PGVector.")
+                return None
+        except Exception as e:
+            print(f"ERROR: Error searching for task {task_id} in LangChain PGVector: {e}")
+            traceback.print_exc()
+            return None
+
+    def update_task_manual(self, task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Manually update a task"""
+        # Fetch the task, prioritize from memory, then DB
+        task = None
+        for i, t in enumerate(self.tasks):
+            if t['id'] == task_id:
+                task = t
+                break
+        
+        if not task:
+            task = self.get_task_by_id(task_id)
+        
+        if task:
+            task.update(updates)
+            task['updated_at'] = datetime.now().isoformat()
+            
+            # Update in memory (if found there)
+            for i, t in enumerate(self.tasks):
+                if t['id'] == task_id:
+                    self.tasks[i] = task
+                    break
+            else: # If not found in memory, add it
+                self.tasks.append(task)
+            
+            # Update in vector store (DB)
+            self._update_task_in_vector_store(task)
+            return task
+        
+        return None
+    
+    def mark_task_complete(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Mark a task as complete"""
+        return self.update_task_manual(task_id, {
+            'completed': True,
+            'completed_at': datetime.now().isoformat()
+        })
+
 class EducationManager:
     def __init__(self):
         # A nested dictionary to store assistants:

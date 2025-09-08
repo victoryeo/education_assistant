@@ -558,7 +558,43 @@ class ParentTaskViewSet(TaskViewSet):
         return Response({
             "tasks": queryset,
         }, status=status.HTTP_200_OK)
-    
+
+    @action(detail=True, methods=['put'], url_path='complete')
+    def complete_task(self, request, pk=None):
+        """
+        Complete a specific task.
+        URL: PUT /parent/tasks/{task_id}/complete/
+        """
+        print(f"complete_task called for task ID: {pk}")
+        try:
+            parent_assistant = self.get_parent_assistant()
+            if not parent_assistant:
+                return Response(
+                    {"error": "Parent assistant not available"}, 
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            task = parent_assistant.mark_task_complete(task_id)
+            if not task:
+                return Response(
+                    {"error": "Task not found"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            return Response(
+                {"success": True, "message": "Task marked as complete", "task": task},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            print(f"Error in async complete_task: {str(e)}")
+            return Response(
+                {
+                    "error": "Failed to complete task", 
+                    "details": str(e),
+                    "task_id": pk
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 @csrf_exempt
 def index(request):
     """

@@ -1006,12 +1006,8 @@ class MultiAgentEducationAssistant:
     def delete_task(self, task_id: str) -> bool:
         """
         Delete a task from the vector store.
-        
-        Args:
-            task_id: The ID of the task to delete
-            
-        Returns:
-            bool: True if deletion was successful, False otherwise
+        Args: task_id: The ID of the task to delete
+        Returns: bool: True if deletion was successful, False otherwise
         """
         print(f"delete_task called for task_id: {task_id}")
         try:
@@ -1034,53 +1030,36 @@ class MultiAgentEducationAssistant:
                     filter_={"id": str(task_id)}
                 )
                 print(f"Successfully deleted task {task_id}")
-                return True
-                
-            except Exception as e:
-                print(f"Error deleting task {task_id} from vector store: {str(e)}")
-                # Fall back to direct SQL delete
+                # Direct SQL delete
                 try:
                     conn = psycopg2.connect(self.db_connection_string)
                     cur = conn.cursor()
                     
-                    # Get collection UUID
-                    cur.execute("""
-                        SELECT uuid FROM langchain_pg_collection 
-                        WHERE name = %s;
-                    """, (self.collection_name,))
-                    
+                    # Get the collection UUID (needed to filter rows belonging to this logical collection)
+                    cur.execute(f"SELECT uuid FROM langchain_pg_collection WHERE name = %s;", (self.collection_name,))
                     collection_uuid_row = cur.fetchone()
-                    if not collection_uuid_row:
-                        print(f"Collection {self.collection_name} not found")
-                        return False
-                        
-                    collection_uuid = collection_uuid_row[0]
                     
-                    # Delete the task
-                    delete_sql = """
-                        DELETE FROM langchain_pg_embedding 
-                        WHERE collection_id = %s::uuid 
-                        AND (document::jsonb)->>'id' = %s::text;
-                    """
-                    cur.execute(delete_sql, (str(collection_uuid), str(task_id)))
-                    conn.commit()
-                    
-                    if cur.rowcount > 0:
-                        print(f"Successfully deleted task {task_id} via direct SQL")
-                        return True
-                    else:
-                        print(f"No task found with ID {task_id}")
-                        return False
+                    if collection_uuid_row:
+                        collection_uuid = collection_uuid_row[0]
+                        print(f"DEBUG: Attempting direct SQL DELETE for collection {self.collection_name} ({collection_uuid}) and task_id {task_id}.")
                         
-                except Exception as sql_error:
-                    print(f"Error in direct SQL delete: {str(sql_error)}")
-                    traceback.print_exc()
-                    return False
-                finally:
-                    if 'cur' in locals():
-                        cur.close()
-                    if 'conn' in locals():
-                        conn.close()
+                        delete_sql = f"DELETE FROM langchain_pg_embedding WHERE collection_id = %s::uuid AND (document::jsonb)->>'id' = %s::text;"
+                        cur.execute(delete_sql, (str(collection_uuid), str(task_id)))
+                        rows_deleted = cur.rowcount
+                        conn.commit() # <<< Explicit COMMIT is crucial for direct SQL
+                        print(f"DEBUG: Direct SQL DELETE completed. Rows deleted: {rows_deleted} for task ID {task_id}.")
+                        if rows_deleted == 0:
+                            print(f"WARNING: Direct SQL delete found 0 rows for task ID {task_id}. Check ID, collection, or if already deleted.")                   
+                    cur.close()
+                    conn.close()
+                except Exception as e:
+                    print(f"ERROR: Exception during direct SQL delete for task {task_id}: {e}")
+                # End of Direct SQL delete
+                return True
+                
+            except Exception as e:
+                print(f"Error deleting task {task_id} from vector store: {str(e)}")
+                return False
                         
         except Exception as e:
             print(f"Unexpected error in delete_task: {str(e)}")

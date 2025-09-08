@@ -77,6 +77,7 @@ export const deleteTask = async (assistantType: 'student' | 'parent', taskId: st
     },
   });
 
+  console.log('deleteTask response', response)
   if (response.error) {
     throw new Error(response.error);
   }

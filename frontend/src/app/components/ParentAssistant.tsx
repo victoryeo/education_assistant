@@ -105,8 +105,8 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
     try {
       setDeletingTaskId(taskId);
       const result = await deleteTask('parent', taskId);
-      
-      if (result.success) {
+      console.log('deleteTask result', result)
+      if (result) {
         // Remove the task from the local state
         setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
         
@@ -123,6 +123,7 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
       } else {
         throw new Error(result.message || 'Failed to delete task');
       }
+      await handleFetchTasks();
     } catch (err) {
       console.error('Error deleting task:', err);
       setTaskError('Failed to delete task. Please try again.');
@@ -172,7 +173,7 @@ export default function ParentAssistant({ onBack }: AssistantProps) {
       setAssistantMessages(assistantMessage)
 
       // Fetch tasks after getting assistant's response
-      handleFetchTasks();
+      await handleFetchTasks();
     } catch (error) {
       console.error('Error getting response from assistant:', String(error));
       

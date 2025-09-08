@@ -573,7 +573,7 @@ class ParentTaskViewSet(TaskViewSet):
                     {"error": "Parent assistant not available"}, 
                     status=status.HTTP_503_SERVICE_UNAVAILABLE
                 )
-            task = parent_assistant.mark_task_complete(task_id)
+            task = parent_assistant.mark_task_complete(pk)  # Using pk instead of task_id
             if not task:
                 return Response(
                     {"error": "Task not found"}, 

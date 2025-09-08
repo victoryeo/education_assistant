@@ -1,6 +1,6 @@
 Education assistant backend
 
-This is a backend for education assistant.
+This is a backend for education assistant. It is built using FastAPI.
 
 To run the backend, you need to have python installed.
 

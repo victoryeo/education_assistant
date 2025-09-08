@@ -851,8 +851,6 @@ class MultiAgentEducationAssistant:
                 document = row[0]
                 documentJson = json.loads(document)
                 print("DEBUG: Row: ", documentJson)
-                print("DEBUG: Category: ", documentJson['category'], self.category)
-                print("DEBUG: User ID: ", documentJson['user_id'], self.user_id)
                 # The 'document' column in langchain_pg_embedding IS your metadata
                 # So it should contain 'category', 'user_id' directly.
                 if documentJson['user_id'].strip() == str(self.user_id):

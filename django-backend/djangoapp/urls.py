@@ -10,8 +10,8 @@ from django.http import HttpResponse
 # Create a router for our API endpoints
 router = routers.DefaultRouter()
 router.register(r'tasks', views.TaskViewSet, basename='task')
-router.register(r'student/tasks', views.StudentTaskViewSet, basename='student-task')
-router.register(r'parent/tasks', views.ParentTaskViewSet, basename='parent-task')
+router.register(r'student/tasks', views.StudentTaskViewSet, basename='student-tasks')
+router.register(r'parent/tasks', views.ParentTaskViewSet, basename='parent-tasks')
 
 # API URL patterns
 api_patterns = [
@@ -25,6 +25,14 @@ api_patterns = [
     path('auth/google/callback', views.GoogleCallbackView.as_view(), name='auth_google_callback'),
     # Task management
     path('tasks/summary/', views.TaskSummaryView.as_view(), name='task-summary'),
+    
+    # Explicit route for complete task action (handles both with and without trailing slash)
+    path('parent/tasks/<uuid:pk>/complete/', 
+         views.ParentTaskViewSet.as_view({'put': 'complete_task'}), 
+         name='parent-task-complete'),
+    path('parent/tasks/<uuid:pk>/complete',  # Without trailing slash
+         views.ParentTaskViewSet.as_view({'put': 'complete_task'}), 
+         name='parent-task-complete-noslash'),
     
     # Include router URLs
     path('', include(router.urls)),

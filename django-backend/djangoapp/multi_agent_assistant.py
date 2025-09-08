@@ -884,7 +884,7 @@ class MultiAgentEducationAssistant:
         print(f"DEBUG: _update_task_in_vector_store START for task_id: {task_id}")
         
         # --- Direct SQL Delete Approach (if LangChain's delete fails) ---
-        try:
+        """try:
             conn = psycopg2.connect(self.db_connection_string)
             cur = conn.cursor()
             
@@ -911,14 +911,18 @@ class MultiAgentEducationAssistant:
         except Exception as e:
             print(f"ERROR: Exception during direct SQL delete for task {task_id}: {e}")
             traceback.print_exc()
-            # If deletion failed, you might still want to try to add the new version.
+            # If deletion failed, you might still want to try to add the new version."""
 
-        # --- Add the updated document ---
-        print(f"DEBUG: Adding updated task to vector store for task_id: {task_id}")
+        # --- Use task manager vector store ---
+        print(f"DEBUG: Deleting/Adding updated task to vector store for task_id: {task_id}")
         task_manager = self.agents.get('task_manager')
         if not task_manager or not hasattr(task_manager, 'vector_store'):
             print("ERROR: Task manager or its vector store not available")
         else:
+            # Delete existing task with this ID
+            task_manager.vector_store.delete(
+                filter_={"id": task_id}
+            )
             # Add the updated task
             task_manager.vector_store.add_documents([Document(page_content=json.dumps(task))])
             print(f"DEBUG: _update_task_in_vector_store END for task_id: {task_id}")

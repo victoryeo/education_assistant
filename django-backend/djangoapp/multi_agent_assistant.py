@@ -942,9 +942,15 @@ class MultiAgentEducationAssistant:
             
             collection_uuid = collection_uuid_row[0]
 
-            # Query langchain_pg_embedding table, filtering by collection_id and metadata->>'id'
-            cur.execute(f"SELECT document FROM langchain_pg_embedding WHERE collection_id = %s AND document->>'id' = %s LIMIT 1;", 
-                        (str(collection_uuid), task_id))
+            # Query langchain_pg_embedding table, filtering by collection_id and document->>'id'
+            # Cast both sides to text for proper comparison
+            cur.execute("""
+                SELECT document 
+                FROM langchain_pg_embedding 
+                WHERE collection_id = %s::uuid 
+                AND (document::jsonb)->>'id' = %s::text
+                LIMIT 1;
+            """, (str(collection_uuid), str(task_id)))
             
             result = cur.fetchone()
             cur.close()
@@ -973,18 +979,10 @@ class MultiAgentEducationAssistant:
         if not task:
             task = self.get_task_by_id(task_id)
         
+        print(f"DEBUG: update_task_manual - task type: {type(task)}, content: {task}")
+        if isinstance(task, str):
+            task = json.loads(task)
         if task:
-            task.update(updates)
-            task['updated_at'] = datetime.now().isoformat()
-            
-            # Update in memory (if found there)
-            for i, t in enumerate(self.tasks):
-                if t['id'] == task_id:
-                    self.tasks[i] = task
-                    break
-            else: # If not found in memory, add it
-                self.tasks.append(task)
-            
             # Update in vector store (DB)
             self._update_task_in_vector_store(task)
             return task

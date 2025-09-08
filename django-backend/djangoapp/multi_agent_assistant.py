@@ -916,9 +916,14 @@ class MultiAgentEducationAssistant:
             # If deletion failed, you might still want to try to add the new version.
 
         # --- Add the updated document ---
-        print(f"DEBUG: Calling _add_task_to_vector_store for task_id: {task_id} after delete attempt.")
-        self.vector_store.add_documents([Document(page_content=json.dumps(task))])
-        print(f"DEBUG: _update_task_in_vector_store END for task_id: {task_id}")
+        print(f"DEBUG: Adding updated task to vector store for task_id: {task_id}")
+        task_manager = self.agents.get('task_manager')
+        if not task_manager or not hasattr(task_manager, 'vector_store'):
+            print("ERROR: Task manager or its vector store not available")
+        else:
+            # Add the updated task
+            task_manager.vector_store.add_documents([Document(page_content=json.dumps(task))])
+            print(f"DEBUG: _update_task_in_vector_store END for task_id: {task_id}")
 
     def get_task_by_id(self, task_id: str) -> Optional[Dict[str, Any]]:
         """

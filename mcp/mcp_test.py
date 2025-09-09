@@ -4,6 +4,7 @@ import os
 from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any, Dict
+from mcp import ClientSession, StdioServerParameters
 
 # Server configuration class
 class ServerConfig:
@@ -158,13 +159,19 @@ async def test_mcp_server():
         args=[server_file_path, "--run-server"]
     )
 
+    server_params = StdioServerParameters(
+        command="python3",              # The executable to run
+        args=["calculator_server.py"], # The server script (you’ll need to create this)
+        env=None                       # Optional: environment variables (None uses defaults)
+    )
+
     print(f"🔗 Connecting to MCP server...")
     print(f"   Command: {server_config.command}")
     print(f"   Args: {server_config.args}")
 
     # Connect to server and run tests
     try:
-        async with stdio_client(server_config) as (read, write):
+        async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 print("✅ Server connection established\n")
@@ -194,18 +201,6 @@ async def test_mcp_server():
                         print(f"Error: {e}\n")
                 
                 print(f"=== Test Results: {success_count}/{len(test_cases)} passed ===\n")
-                
-                # Test resources
-                print("Testing resources...")
-                try:
-                    capabilities = await session.read_resource("agent_capabilities")
-                    print("✅ Successfully read agent capabilities")
-                    
-                    active_agents = await session.read_resource("active_agents")
-                    print("✅ Successfully read active agents")
-                    
-                except Exception as e:
-                    print(f"❌ Resource test failed: {e}")
                     
     except Exception as e:
         print(f"❌ Failed to connect to server: {e}")

@@ -31,7 +31,11 @@ django_backend_path = os.path.join(current_dir, '..', 'django-backend/djangoapp'
 sys.path.append(django_backend_path)
 
 # Import existing MultiAgentEducationAssistant
-from multi_agent_assistant import MultiAgentEducationAssistant
+try:
+    from multi_agent_assistant import MultiAgentEducationAssistant
+except ImportError:
+    logger.warning("Could not import MultiAgentEducationAssistant, using mock implementation")
+    MultiAgentEducationAssistant = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +45,7 @@ class MultiAgentMCPServer:
     """MCP Server wrapper for MultiAgentEducationAssistant"""
     
     def __init__(self):
-        self.agents: Dict[str, Any] = {}  # Using Any since we don't have the actual class
+        self.agents: Dict[str, Dict[str, Any]] = {}  # agent_key -> agent_data
         self.active_sessions: Dict[str, str] = {}  # session_id -> agent_key
 
     def _get_agent_key(self, user_id: str, category: str) -> str:
@@ -57,11 +61,34 @@ class MultiAgentMCPServer:
                 role_prompt = f"You are an educational assistant specializing in {category}."
             
             try:
-                self.agents[agent_key] = MultiAgentEducationAssistant(
-                    role_prompt=role_prompt,
-                    category=category,
-                    user_id=user_id
-                )
+                if MultiAgentEducationAssistant:
+                    # Use real implementation
+                    agent_instance = MultiAgentEducationAssistant(
+                        role_prompt=role_prompt,
+                        category=category,
+                        user_id=user_id
+                    )
+                    self.agents[agent_key] = {
+                        "instance": agent_instance,
+                        "user_id": user_id,
+                        "category": category,
+                        "role_prompt": role_prompt,
+                        "tasks": [],
+                        "conversation_history": [],
+                        "created_at": datetime.now().isoformat()
+                    }
+                else:
+                    # Use mock implementation
+                    self.agents[agent_key] = {
+                        "instance": None,
+                        "user_id": user_id,
+                        "category": category,
+                        "role_prompt": role_prompt,
+                        "tasks": [],
+                        "conversation_history": [],
+                        "created_at": datetime.now().isoformat()
+                    }
+                
                 logger.info(f"Created new agent for user {user_id}, category {category}")
             except Exception as e:
                 logger.error(f"Failed to create agent: {e}")
@@ -120,6 +147,23 @@ async def list_tools() -> List[Tool]:
             }
         ),
         Tool(
+            name="update_task",
+            description="Update an existing task",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID to update"},
+                    "user_id": {"type": "string", "description": "Unique identifier for the user"},
+                    "category": {"type": "string", "default": "general", "description": "Category/subject area"},
+                    "title": {"type": "string", "description": "New task title"},
+                    "description": {"type": "string", "description": "New task description"},
+                    "status": {"type": "string", "description": "New task status"},
+                    "priority": {"type": "string", "description": "New task priority"}
+                },
+                "required": ["task_id", "user_id"]
+            }
+        ),
+        Tool(
             name="get_agent_status",
             description="Get status of all agents for a user/category",
             inputSchema={
@@ -156,10 +200,52 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             category = arguments.get("category", "general")
             role_prompt = arguments.get("role_prompt")
             
-            agent = await mcp_server._get_or_create_agent(user_id, category, role_prompt)
+            agent_data = await mcp_server._get_or_create_agent(user_id, category, role_prompt)
             
-            # Mock response - replace with actual agent processing
-            response, created_tasks = await agent.process_message(user_input)
+            # Add to conversation history
+            agent_data["conversation_history"].append({
+                "timestamp": datetime.now().isoformat(),
+                "type": "user",
+                "content": user_input
+            })
+            
+            if agent_data["instance"] and MultiAgentEducationAssistant:
+                # Use real agent processing
+                try:
+                    response, created_tasks = await agent_data["instance"].process_message(user_input)
+                    
+                    # Add created tasks to agent data
+                    if created_tasks:
+                        agent_data["tasks"].extend(created_tasks)
+                except Exception as e:
+                    response = f"Agent processing error: {str(e)}"
+                    created_tasks = []
+            else:
+                # Mock response
+                response = f"Mock response for '{user_input}' in category '{category}'"
+                created_tasks = []
+                
+                # Mock task creation based on intent
+                if any(keyword in user_input.lower() for keyword in ["create", "add", "new", "todo"]):
+                    mock_task = {
+                        "id": str(uuid.uuid4()),
+                        "title": f"Task from: {user_input[:50]}...",
+                        "description": f"Auto-generated task from user input",
+                        "category": category,
+                        "priority": "medium",
+                        "status": "pending",
+                        "created_at": datetime.now().isoformat(),
+                        "user_id": user_id
+                    }
+                    agent_data["tasks"].append(mock_task)
+                    created_tasks = [mock_task]
+            
+            # Add response to conversation history
+            agent_data["conversation_history"].append({
+                "timestamp": datetime.now().isoformat(),
+                "type": "assistant", 
+                "content": response
+            })
             
             result = {
                 "response": response,
@@ -174,10 +260,8 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             category = arguments.get("category", "general")
             status = arguments.get("status")
             
-            agent = await mcp_server._get_or_create_agent(user_id, category)
-            
-            # Mock tasks - replace with actual agent tasks
-            tasks = agent.get("tasks", [])
+            agent_data = await mcp_server._get_or_create_agent(user_id, category)
+            tasks = agent_data["tasks"]
             
             if status:
                 tasks = [t for t in tasks if t.get('status') == status]
@@ -191,7 +275,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             category = arguments.get("category", "general")
             priority = arguments.get("priority", "medium")
             
-            agent = await mcp_server._get_or_create_agent(user_id, category)
+            agent_data = await mcp_server._get_or_create_agent(user_id, category)
             
             # Create new task
             new_task = {
@@ -205,10 +289,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 "user_id": user_id
             }
             
-            # Add to agent tasks (mock)
-            if "tasks" not in agent:
-                agent["tasks"] = []
-            agent["tasks"].append(new_task)
+            agent_data["tasks"].append(new_task)
             
             result = {
                 "message": f"Created task: {title}",
@@ -217,18 +298,58 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             
             return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
         
+        elif name == "update_task":
+            task_id = arguments["task_id"]
+            user_id = arguments["user_id"]
+            category = arguments.get("category", "general")
+            
+            agent_data = await mcp_server._get_or_create_agent(user_id, category)
+            
+            # Find and update task
+            task_found = False
+            for task in agent_data["tasks"]:
+                if task["id"] == task_id:
+                    task_found = True
+                    
+                    # Update fields if provided
+                    if "title" in arguments:
+                        task["title"] = arguments["title"]
+                    if "description" in arguments:
+                        task["description"] = arguments["description"]
+                    if "status" in arguments:
+                        task["status"] = arguments["status"]
+                    if "priority" in arguments:
+                        task["priority"] = arguments["priority"]
+                    
+                    task["updated_at"] = datetime.now().isoformat()
+                    
+                    result = {
+                        "message": f"Updated task: {task['title']}",
+                        "updated_task": task
+                    }
+                    break
+            
+            if not task_found:
+                result = {
+                    "error": f"Task with ID {task_id} not found"
+                }
+            
+            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+        
         elif name == "get_agent_status":
             user_id = arguments["user_id"]
             category = arguments.get("category", "general")
             
-            agent = await mcp_server._get_or_create_agent(user_id, category)
+            agent_data = await mcp_server._get_or_create_agent(user_id, category)
             
             status = {
                 "user_id": user_id,
                 "category": category,
-                "tasks_count": len(agent.get("tasks", [])),
-                "conversation_length": len(agent.get("conversation_history", [])),
+                "tasks_count": len(agent_data["tasks"]),
+                "conversation_length": len(agent_data["conversation_history"]),
                 "agent_key": mcp_server._get_agent_key(user_id, category),
+                "created_at": agent_data["created_at"],
+                "has_real_agent": agent_data["instance"] is not None,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -241,6 +362,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             
             # Intent analysis logic
             user_input_lower = user_input.lower()
+            confidence = 0.8
             
             if any(keyword in user_input_lower for keyword in ["create", "add", "new", "todo"]):
                 intent = "create"
@@ -254,11 +376,15 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 intent = "schedule"
             elif any(keyword in user_input_lower for keyword in ["learn", "study", "education", "course"]):
                 intent = "education"
+            elif "?" in user_input:
+                intent = "question"
             else:
                 intent = "query"
+                confidence = 0.5
             
             result = {
                 "intent": intent,
+                "confidence": confidence,
                 "user_input": user_input,
                 "user_id": user_id,
                 "category": category,
@@ -302,6 +428,12 @@ async def list_resources() -> ListResourcesResult:
                 name="Agent Capabilities",
                 description="Information about multi-agent system capabilities",
                 mimeType="application/json"
+            ),
+            Resource(
+                uri="active_agents",
+                name="Active Agents",
+                description="List of all currently active agents",
+                mimeType="application/json"
             )
         ]
     )
@@ -320,7 +452,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 },
                 "supported_intents": [
                     "create", "update", "complete", "summary",
-                    "schedule", "education", "query"
+                    "schedule", "education", "query", "question"
                 ],
                 "supported_categories": [
                     "general", "math", "science", "history",
@@ -332,12 +464,35 @@ async def read_resource(uri: str) -> ReadResourceResult:
                     "Educational assistance",
                     "Scheduling support",
                     "Intent analysis",
-                    "Conversation history"
-                ]
+                    "Conversation history",
+                    "Real-time processing"
+                ],
+                "server_info": {
+                    "name": "multi-agent-education-assistant",
+                    "version": "1.0.0",
+                    "has_real_agents": MultiAgentEducationAssistant is not None
+                }
             }
             
             return ReadResourceResult(
                 contents=[TextContent(text=json.dumps(capabilities, indent=2))]
+            )
+        
+        elif uri == "active_agents":
+            agents_info = []
+            for agent_key, agent_data in mcp_server.agents.items():
+                agents_info.append({
+                    "agent_key": agent_key,
+                    "user_id": agent_data["user_id"],
+                    "category": agent_data["category"],
+                    "created_at": agent_data["created_at"],
+                    "tasks_count": len(agent_data["tasks"]),
+                    "conversation_length": len(agent_data["conversation_history"]),
+                    "has_real_instance": agent_data["instance"] is not None
+                })
+            
+            return ReadResourceResult(
+                contents=[TextContent(text=json.dumps(agents_info, indent=2))]
             )
         
         elif uri.startswith("tasks/"):
@@ -347,8 +502,8 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 user_id = parts[1]
                 category = parts[2] if len(parts) > 2 else "general"
                 
-                agent = await mcp_server._get_or_create_agent(user_id, category)
-                tasks = agent.get("tasks", [])
+                agent_data = await mcp_server._get_or_create_agent(user_id, category)
+                tasks = agent_data["tasks"]
                 
                 return ReadResourceResult(
                     contents=[TextContent(text=json.dumps(tasks, indent=2))]
@@ -361,8 +516,8 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 user_id = parts[1]
                 category = parts[2] if len(parts) > 2 else "general"
                 
-                agent = await mcp_server._get_or_create_agent(user_id, category)
-                history = agent.get("conversation_history", [])
+                agent_data = await mcp_server._get_or_create_agent(user_id, category)
+                history = agent_data["conversation_history"]
                 
                 return ReadResourceResult(
                     contents=[TextContent(text=json.dumps(history, indent=2))]
@@ -384,8 +539,13 @@ async def main():
     """Main entry point for the MCP server"""
     logger.info("Starting Multi-Agent Education Assistant MCP Server...")
     
-    async with stdio_server() as streams:
-        await server.run(*streams)
+    # MCP server expects initialization_options
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            initialization_options={}
+        )
 
 if __name__ == "__main__":
     asyncio.run(main())

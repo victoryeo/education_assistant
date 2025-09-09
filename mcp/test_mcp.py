@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any, Dict
@@ -135,9 +136,28 @@ async def test_mcp_server():
     
     print("=== MCP Server Test Suite ===\n")
     
+    class ServerConfig:
+        def __init__(self, command: str, args: list[str]):
+            self.command = command
+            self.args = args
+            self.env = os.environ.copy()
+            self.cwd = os.getcwd()
+        
+    # Get the absolute path of the current file
+    server_file_path = os.path.abspath(__file__)
+    
+    # --- The Fix for your error is here ---
+    # Create an instance of the ServerConfig class.
+    # This provides the 'command' and 'args' as attributes.
+    server_config = ServerConfig(
+        command=sys.executable,
+        args=[server_file_path]
+    )
+    print(f"Connecting to MCP server via command: '{server_config.command}' with args: {server_config.args}")
+
     # Connect to server and run tests
     try:
-        async with stdio_client("python", ["multiagent_mcp_server.py"]) as (read, write):
+        async with stdio_client(server_config) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 print("✅ Server connection established\n")

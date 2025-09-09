@@ -12,19 +12,23 @@ from typing import Any, Dict, List, Optional, Sequence
 from datetime import datetime
 import os
 import uuid
-
-from mcp import Server, Tool, Resource
-from mcp.server.models import InitializationOptions
-from mcp.server.session import ServerSession
+import sys
+from mcp.server import Server
+from mcp.server.stdio import stdio_server
 from mcp.types import (
-    TextContent, 
-    JSONContent,
-    EmbeddedResource,
-    TextResourceContents,
-    JSONResourceContents,
-    Tool as ToolModel,
-    Resource as ResourceModel
+    TextContent,
+    Tool,
+    Resource,
+    CallToolResult,
+    ListResourcesResult,
+    ListToolsResult,
+    ReadResourceResult
 )
+
+# Get the absolute path of the parent directory of Django app
+current_dir = os.path.dirname(os.path.abspath(__file__))
+django_backend_path = os.path.join(current_dir, '..', 'django-backend/djangoapp')
+sys.path.append(django_backend_path)
 
 # Import existing MultiAgentEducationAssistant
 from multi_agent_assistant import MultiAgentEducationAssistant
@@ -37,19 +41,14 @@ class MultiAgentMCPServer:
     """MCP Server wrapper for MultiAgentEducationAssistant"""
     
     def __init__(self):
-        self.server = Server("multi-agent-education-assistant")
-        self.agents: Dict[str, MultiAgentEducationAssistant] = {}
+        self.agents: Dict[str, Any] = {}  # Using Any since we don't have the actual class
         self.active_sessions: Dict[str, str] = {}  # session_id -> agent_key
-        
-        # Register MCP tools and resources
-        self._register_tools()
-        self._register_resources()
-        
+
     def _get_agent_key(self, user_id: str, category: str) -> str:
         """Generate unique agent key"""
         return f"{user_id}_{category}"
     
-    async def _get_or_create_agent(self, user_id: str, category: str, role_prompt: Optional[str] = None) -> MultiAgentEducationAssistant:
+    async def _get_or_create_agent(self, user_id: str, category: str, role_prompt: Optional[str] = None):
         """Get existing agent or create new one"""
         agent_key = self._get_agent_key(user_id, category)
         
@@ -69,346 +68,324 @@ class MultiAgentMCPServer:
                 raise
         
         return self.agents[agent_key]
-    
-    def _register_tools(self):
-        """Register all MCP tools"""
-        
-        @self.server.tool("process_message")
-        async def process_message(
-            user_input: str,
-            user_id: str,
-            category: str = "general",
-            role_prompt: Optional[str] = None
-        ) -> List[TextContent]:
-            """
-            Process a message through the multi-agent education system
-            
-            Args:
-                user_input: The user's message/query
-                user_id: Unique identifier for the user
-                category: Category/subject area (e.g., "math", "science", "general")
-                role_prompt: Optional custom role prompt for the education specialist
-            """
-            try:
-                agent = await self._get_or_create_agent(user_id, category, role_prompt)
-                response, created_tasks = await agent.process_message(user_input)
-                
-                result = {
-                    "response": response,
-                    "created_tasks": created_tasks,
-                    "timestamp": datetime.now().isoformat()
-                }
-                
-                return [TextContent(text=json.dumps(result, indent=2))]
-                
-            except Exception as e:
-                logger.error(f"Error processing message: {e}")
-                return [TextContent(text=f"Error: {str(e)}")]
-        
-        @self.server.tool("get_tasks")
-        async def get_tasks(
-            user_id: str,
-            category: str = "general",
-            status: Optional[str] = None
-        ) -> List[TextContent]:
-            """
-            Get tasks for a user in a specific category
-            
-            Args:
-                user_id: Unique identifier for the user
-                category: Category/subject area
-                status: Optional status filter (pending, completed, etc.)
-            """
-            try:
-                agent = await self._get_or_create_agent(user_id, category)
-                tasks = agent.tasks
-                
-                if status:
-                    tasks = [t for t in tasks if t.get('status') == status]
-                
-                return [TextContent(text=json.dumps(tasks, indent=2))]
-                
-            except Exception as e:
-                logger.error(f"Error getting tasks: {e}")
-                return [TextContent(text=f"Error: {str(e)}")]
-        
-        @self.server.tool("create_task")
-        async def create_task(
-            title: str,
-            user_id: str,
-            description: str = "",
-            category: str = "general",
-            priority: str = "medium"
-        ) -> List[TextContent]:
-            """
-            Create a new task
-            
-            Args:
-                title: Task title
-                user_id: Unique identifier for the user
-                description: Task description
-                category: Category/subject area
-                priority: Task priority (low, medium, high)
-            """
-            try:
-                agent = await self._get_or_create_agent(user_id, category)
-                
-                # Create task through the agent's process_message method
-                create_message = f"Create a new task: {title}. Description: {description}. Priority: {priority}"
-                response, created_tasks = await agent.process_message(create_message)
-                
-                return [TextContent(text=json.dumps({
-                    "message": response,
-                    "created_tasks": created_tasks
-                }, indent=2))]
-                
-            except Exception as e:
-                logger.error(f"Error creating task: {e}")
-                return [TextContent(text=f"Error: {str(e)}")]
-        
-        @self.server.tool("get_agent_status")
-        async def get_agent_status(
-            user_id: str,
-            category: str = "general"
-        ) -> List[TextContent]:
-            """
-            Get status of all agents for a user/category
-            
-            Args:
-                user_id: Unique identifier for the user
-                category: Category/subject area
-            """
-            try:
-                agent = await self._get_or_create_agent(user_id, category)
-                status = agent.get_agent_status()
-                
-                return [TextContent(text=json.dumps(status, indent=2))]
-                
-            except Exception as e:
-                logger.error(f"Error getting agent status: {e}")
-                return [TextContent(text=f"Error: {str(e)}")]
-        
-        @self.server.tool("analyze_intent")
-        async def analyze_intent(
-            user_input: str,
-            user_id: str,
-            category: str = "general"
-        ) -> List[TextContent]:
-            """
-            Analyze user intent without full processing
-            
-            Args:
-                user_input: The user's message/query
-                user_id: Unique identifier for the user
-                category: Category/subject area
-            """
-            try:
-                agent = await self._get_or_create_agent(user_id, category)
-                
-                # Simulate intent analysis
-                user_input_lower = user_input.lower()
-                
-                if any(keyword in user_input_lower for keyword in ["create", "add", "new", "todo"]):
-                    intent = "create"
-                elif any(keyword in user_input_lower for keyword in ["update", "modify", "change", "edit"]):
-                    intent = "update"
-                elif any(keyword in user_input_lower for keyword in ["complete", "done", "finished", "mark"]):
-                    intent = "complete"
-                elif any(keyword in user_input_lower for keyword in ["summary", "list", "show", "overview"]):
-                    intent = "summary"
-                elif any(keyword in user_input_lower for keyword in ["schedule", "deadline", "priority", "when"]):
-                    intent = "schedule"
-                elif any(keyword in user_input_lower for keyword in ["learn", "study", "education", "course"]):
-                    intent = "education"
-                else:
-                    intent = "query"
-                
-                result = {
-                    "intent": intent,
-                    "user_input": user_input,
-                    "analysis_timestamp": datetime.now().isoformat()
-                }
-                
-                return [TextContent(text=json.dumps(result, indent=2))]
-                
-            except Exception as e:
-                logger.error(f"Error analyzing intent: {e}")
-                return [TextContent(text=f"Error: {str(e)}")]
-    
-    def _register_resources(self):
-        """Register MCP resources"""
-        
-        @self.server.resource("tasks/{user_id}/{category}")
-        async def get_user_tasks(user_id: str, category: str = "general") -> str:
-            """Get all tasks for a specific user and category"""
-            try:
-                agent = await self._get_or_create_agent(user_id, category)
-                tasks = agent.tasks
-                return json.dumps(tasks, indent=2)
-            except Exception as e:
-                logger.error(f"Error getting user tasks: {e}")
-                return json.dumps({"error": str(e)})
-        
-        @self.server.resource("conversation_history/{user_id}/{category}")
-        async def get_conversation_history(user_id: str, category: str = "general") -> str:
-            """Get conversation history for a specific user and category"""
-            try:
-                agent = await self._get_or_create_agent(user_id, category)
-                
-                # Convert conversation history to serializable format
-                history = []
-                for msg in agent.conversation_history:
-                    if hasattr(msg, 'content'):
-                        history.append({
-                            "type": msg.__class__.__name__,
-                            "content": msg.content,
-                            "timestamp": datetime.now().isoformat()
-                        })
-                
-                return json.dumps(history, indent=2)
-            except Exception as e:
-                logger.error(f"Error getting conversation history: {e}")
-                return json.dumps({"error": str(e)})
-        
-        @self.server.resource("agent_capabilities")
-        async def get_agent_capabilities() -> str:
-            """Get information about agent capabilities"""
-            capabilities = {
-                "agents": {
-                    "task_manager": "Manages task creation, updates, and tracking",
-                    "education_specialist": "Provides educational content and learning guidance",
-                    "scheduler": "Handles scheduling and deadline management",
-                    "coordinator": "Coordinates responses between agents"
+
+# Create server instance
+server = Server("multi-agent-education-assistant")
+mcp_server = MultiAgentMCPServer()
+
+@server.list_tools()
+async def list_tools() -> List[Tool]:
+    """List available tools"""
+    return [
+        Tool(
+            name="process_message",
+            description="Process a message through the multi-agent education system",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_input": {"type": "string", "description": "The user's message/query"},
+                    "user_id": {"type": "string", "description": "Unique identifier for the user"},
+                    "category": {"type": "string", "default": "general", "description": "Category/subject area"},
+                    "role_prompt": {"type": "string", "description": "Optional custom role prompt"}
                 },
-                "supported_intents": [
-                    "create", "update", "complete", "summary", 
-                    "schedule", "education", "query"
-                ],
-                "supported_categories": [
-                    "general", "math", "science", "history", 
-                    "literature", "programming", "languages"
-                ],
-                "features": [
-                    "Multi-agent collaboration",
-                    "Task management",
-                    "Educational assistance",
-                    "Scheduling support",
-                    "Intent analysis",
-                    "Conversation history"
-                ]
+                "required": ["user_input", "user_id"]
             }
-            return json.dumps(capabilities, indent=2)
-    
-    async def list_resources(self) -> List[ResourceModel]:
-        """List available resources"""
-        return [
-            ResourceModel(
+        ),
+        Tool(
+            name="get_tasks",
+            description="Get tasks for a user in a specific category",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string", "description": "Unique identifier for the user"},
+                    "category": {"type": "string", "default": "general", "description": "Category/subject area"},
+                    "status": {"type": "string", "description": "Optional status filter"}
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="create_task",
+            description="Create a new task",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Task title"},
+                    "user_id": {"type": "string", "description": "Unique identifier for the user"},
+                    "description": {"type": "string", "default": "", "description": "Task description"},
+                    "category": {"type": "string", "default": "general", "description": "Category/subject area"},
+                    "priority": {"type": "string", "default": "medium", "description": "Task priority"}
+                },
+                "required": ["title", "user_id"]
+            }
+        ),
+        Tool(
+            name="get_agent_status",
+            description="Get status of all agents for a user/category",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string", "description": "Unique identifier for the user"},
+                    "category": {"type": "string", "default": "general", "description": "Category/subject area"}
+                },
+                "required": ["user_id"]
+            }
+        ),
+        Tool(
+            name="analyze_intent",
+            description="Analyze user intent without full processing",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "user_input": {"type": "string", "description": "The user's message/query"},
+                    "user_id": {"type": "string", "description": "Unique identifier for the user"},
+                    "category": {"type": "string", "default": "general", "description": "Category/subject area"}
+                },
+                "required": ["user_input", "user_id"]
+            }
+        )
+    ]
+
+@server.call_tool()
+async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
+    """Handle tool calls"""
+    try:
+        if name == "process_message":
+            user_input = arguments["user_input"]
+            user_id = arguments["user_id"]
+            category = arguments.get("category", "general")
+            role_prompt = arguments.get("role_prompt")
+            
+            agent = await mcp_server._get_or_create_agent(user_id, category, role_prompt)
+            
+            # Mock response - replace with actual agent processing
+            response, created_tasks = await agent.process_message(user_input)
+            
+            result = {
+                "response": response,
+                "created_tasks": created_tasks,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+        
+        elif name == "get_tasks":
+            user_id = arguments["user_id"]
+            category = arguments.get("category", "general")
+            status = arguments.get("status")
+            
+            agent = await mcp_server._get_or_create_agent(user_id, category)
+            
+            # Mock tasks - replace with actual agent tasks
+            tasks = agent.get("tasks", [])
+            
+            if status:
+                tasks = [t for t in tasks if t.get('status') == status]
+            
+            return CallToolResult(content=[TextContent(text=json.dumps(tasks, indent=2))])
+        
+        elif name == "create_task":
+            title = arguments["title"]
+            user_id = arguments["user_id"]
+            description = arguments.get("description", "")
+            category = arguments.get("category", "general")
+            priority = arguments.get("priority", "medium")
+            
+            agent = await mcp_server._get_or_create_agent(user_id, category)
+            
+            # Create new task
+            new_task = {
+                "id": str(uuid.uuid4()),
+                "title": title,
+                "description": description,
+                "category": category,
+                "priority": priority,
+                "status": "pending",
+                "created_at": datetime.now().isoformat(),
+                "user_id": user_id
+            }
+            
+            # Add to agent tasks (mock)
+            if "tasks" not in agent:
+                agent["tasks"] = []
+            agent["tasks"].append(new_task)
+            
+            result = {
+                "message": f"Created task: {title}",
+                "created_task": new_task
+            }
+            
+            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+        
+        elif name == "get_agent_status":
+            user_id = arguments["user_id"]
+            category = arguments.get("category", "general")
+            
+            agent = await mcp_server._get_or_create_agent(user_id, category)
+            
+            status = {
+                "user_id": user_id,
+                "category": category,
+                "tasks_count": len(agent.get("tasks", [])),
+                "conversation_length": len(agent.get("conversation_history", [])),
+                "agent_key": mcp_server._get_agent_key(user_id, category),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            return CallToolResult(content=[TextContent(text=json.dumps(status, indent=2))])
+        
+        elif name == "analyze_intent":
+            user_input = arguments["user_input"]
+            user_id = arguments["user_id"]
+            category = arguments.get("category", "general")
+            
+            # Intent analysis logic
+            user_input_lower = user_input.lower()
+            
+            if any(keyword in user_input_lower for keyword in ["create", "add", "new", "todo"]):
+                intent = "create"
+            elif any(keyword in user_input_lower for keyword in ["update", "modify", "change", "edit"]):
+                intent = "update"
+            elif any(keyword in user_input_lower for keyword in ["complete", "done", "finished", "mark"]):
+                intent = "complete"
+            elif any(keyword in user_input_lower for keyword in ["summary", "list", "show", "overview"]):
+                intent = "summary"
+            elif any(keyword in user_input_lower for keyword in ["schedule", "deadline", "priority", "when"]):
+                intent = "schedule"
+            elif any(keyword in user_input_lower for keyword in ["learn", "study", "education", "course"]):
+                intent = "education"
+            else:
+                intent = "query"
+            
+            result = {
+                "intent": intent,
+                "user_input": user_input,
+                "user_id": user_id,
+                "category": category,
+                "analysis_timestamp": datetime.now().isoformat()
+            }
+            
+            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+        
+        else:
+            return CallToolResult(
+                content=[TextContent(text=f"Unknown tool: {name}")],
+                isError=True
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in tool {name}: {e}")
+        return CallToolResult(
+            content=[TextContent(text=f"Error: {str(e)}")],
+            isError=True
+        )
+
+@server.list_resources()
+async def list_resources() -> ListResourcesResult:
+    """List available resources"""
+    return ListResourcesResult(
+        resources=[
+            Resource(
                 uri="tasks/{user_id}/{category}",
                 name="User Tasks",
                 description="Get all tasks for a specific user and category",
                 mimeType="application/json"
             ),
-            ResourceModel(
+            Resource(
                 uri="conversation_history/{user_id}/{category}",
-                name="Conversation History",
+                name="Conversation History", 
                 description="Get conversation history for a specific user and category",
                 mimeType="application/json"
             ),
-            ResourceModel(
+            Resource(
                 uri="agent_capabilities",
                 name="Agent Capabilities",
                 description="Information about multi-agent system capabilities",
                 mimeType="application/json"
             )
         ]
-    
-    async def list_tools(self) -> List[ToolModel]:
-        """List available tools"""
-        return [
-            ToolModel(
-                name="process_message",
-                description="Process a message through the multi-agent education system",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "user_input": {"type": "string", "description": "The user's message/query"},
-                        "user_id": {"type": "string", "description": "Unique identifier for the user"},
-                        "category": {"type": "string", "default": "general", "description": "Category/subject area"},
-                        "role_prompt": {"type": "string", "description": "Optional custom role prompt"}
-                    },
-                    "required": ["user_input", "user_id"]
-                }
-            ),
-            ToolModel(
-                name="get_tasks",
-                description="Get tasks for a user in a specific category",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string", "description": "Unique identifier for the user"},
-                        "category": {"type": "string", "default": "general", "description": "Category/subject area"},
-                        "status": {"type": "string", "description": "Optional status filter"}
-                    },
-                    "required": ["user_id"]
-                }
-            ),
-            ToolModel(
-                name="create_task",
-                description="Create a new task",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string", "description": "Task title"},
-                        "user_id": {"type": "string", "description": "Unique identifier for the user"},
-                        "description": {"type": "string", "default": "", "description": "Task description"},
-                        "category": {"type": "string", "default": "general", "description": "Category/subject area"},
-                        "priority": {"type": "string", "default": "medium", "description": "Task priority"}
-                    },
-                    "required": ["title", "user_id"]
-                }
-            ),
-            ToolModel(
-                name="get_agent_status",
-                description="Get status of all agents for a user/category",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string", "description": "Unique identifier for the user"},
-                        "category": {"type": "string", "default": "general", "description": "Category/subject area"}
-                    },
-                    "required": ["user_id"]
-                }
-            ),
-            ToolModel(
-                name="analyze_intent",
-                description="Analyze user intent without full processing",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "user_input": {"type": "string", "description": "The user's message/query"},
-                        "user_id": {"type": "string", "description": "Unique identifier for the user"},
-                        "category": {"type": "string", "default": "general", "description": "Category/subject area"}
-                    },
-                    "required": ["user_input", "user_id"]
-                }
+    )
+
+@server.read_resource()
+async def read_resource(uri: str) -> ReadResourceResult:
+    """Read a specific resource"""
+    try:
+        if uri == "agent_capabilities":
+            capabilities = {
+                "agents": {
+                    "task_manager": "Manages task creation, updates, and tracking",
+                    "education_specialist": "Provides educational content and learning guidance",
+                    "scheduler": "Handles scheduling and deadline management", 
+                    "coordinator": "Coordinates responses between agents"
+                },
+                "supported_intents": [
+                    "create", "update", "complete", "summary",
+                    "schedule", "education", "query"
+                ],
+                "supported_categories": [
+                    "general", "math", "science", "history",
+                    "literature", "programming", "languages"
+                ],
+                "features": [
+                    "Multi-agent collaboration",
+                    "Task management", 
+                    "Educational assistance",
+                    "Scheduling support",
+                    "Intent analysis",
+                    "Conversation history"
+                ]
+            }
+            
+            return ReadResourceResult(
+                contents=[TextContent(text=json.dumps(capabilities, indent=2))]
             )
-        ]
+        
+        elif uri.startswith("tasks/"):
+            # Parse URI: tasks/{user_id}/{category}
+            parts = uri.split("/")
+            if len(parts) >= 3:
+                user_id = parts[1]
+                category = parts[2] if len(parts) > 2 else "general"
+                
+                agent = await mcp_server._get_or_create_agent(user_id, category)
+                tasks = agent.get("tasks", [])
+                
+                return ReadResourceResult(
+                    contents=[TextContent(text=json.dumps(tasks, indent=2))]
+                )
+        
+        elif uri.startswith("conversation_history/"):
+            # Parse URI: conversation_history/{user_id}/{category}
+            parts = uri.split("/")
+            if len(parts) >= 3:
+                user_id = parts[1]
+                category = parts[2] if len(parts) > 2 else "general"
+                
+                agent = await mcp_server._get_or_create_agent(user_id, category)
+                history = agent.get("conversation_history", [])
+                
+                return ReadResourceResult(
+                    contents=[TextContent(text=json.dumps(history, indent=2))]
+                )
+        
+        return ReadResourceResult(
+            contents=[TextContent(text=f"Resource not found: {uri}")],
+            isError=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Error reading resource {uri}: {e}")
+        return ReadResourceResult(
+            contents=[TextContent(text=f"Error: {str(e)}")],
+            isError=True
+        )
 
 async def main():
     """Main entry point for the MCP server"""
-    # Create server instance
-    mcp_server = MultiAgentMCPServer()
+    logger.info("Starting Multi-Agent Education Assistant MCP Server...")
     
-    # Setup server options
-    init_options = InitializationOptions(
-        server_name="multi-agent-education-assistant",
-        server_version="1.0.0"
-    )
-    
-    # Create session and run server
-    async with mcp_server.server.run_stdio() as session:
-        logger.info("Multi-Agent Education Assistant MCP Server started")
-        await session.run()
+    async with stdio_server() as streams:
+        await server.run(*streams)
 
 if __name__ == "__main__":
     asyncio.run(main())

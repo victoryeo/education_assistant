@@ -100,7 +100,16 @@ class MultiAgentMCPServer:
 # Create server instance
 print("Creating server instance...")
 server = Server("multi-agent-education-assistant")
+
+# Initialize the multi-agent server
 mcp_server = MultiAgentMCPServer()
+
+# Enable debugging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Import MCP types for initialization
+from mcp.server import InitializationOptions
 
 @server.list_tools()
 async def list_tools() -> List[Tool]:
@@ -541,16 +550,33 @@ async def main():
     """Main entry point for the MCP server"""
     logger.info("Starting Multi-Agent Education Assistant MCP Server...")
     
-    # MCP server expects initialization_options
     try:
+        # Create initialization options with required fields
+        init_options = InitializationOptions(
+            server_name="multi-agent-education-assistant",
+            server_version="1.0.0",
+            capabilities={
+                "tools": {},
+                "resources": {}
+            }
+        )
+        
+        # Use stdio for communication
         async with stdio_server() as (read_stream, write_stream):
-            await server.run(
-                read_stream,
-                write_stream,
-                initialization_options={}
-            )
+            # Run the server with the stdio streams and initialization options
+            try:
+                await server.run(
+                    read_stream=read_stream,
+                    write_stream=write_stream,
+                    initialization_options=init_options,
+                    raise_exceptions=True
+                )
+            except Exception as e:
+                logger.error(f"Error in server.run(): {e}", exc_info=True)
+                raise
     except Exception as e:
-        logger.error(f"Error running MCP server: {e}")
+        logger.error(f"Error in main server loop: {e}", exc_info=True)
+        raise
 
 if __name__ == "__main__":
     try:

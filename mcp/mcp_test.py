@@ -149,20 +149,13 @@ async def test_mcp_server():
     
     print("=== MCP Server Test Suite ===\n")
         
-    # Get the absolute path of the current file
-    server_file_path = os.path.abspath("multiagent_mcp_server.py")
+    # Get the absolute path to the server script
+    server_script = os.path.abspath("multiagent_mcp_server.py")
     
-    # Create an instance of the ServerConfig class.
-    # This provides the 'command' and 'args' as attributes.
+    # Create server config
     server_config = ServerConfig(
         command=sys.executable,
-        args=[server_file_path, "--run-server"]
-    )
-
-    server_params = StdioServerParameters(
-        command="python3",              # The executable to run
-        args=["calculator_server.py"], # The server script (you’ll need to create this)
-        env=None                       # Optional: environment variables (None uses defaults)
+        args=[server_script]
     )
 
     print(f"🔗 Connecting to MCP server...")
@@ -171,7 +164,8 @@ async def test_mcp_server():
 
     # Connect to server and run tests
     try:
-        async with stdio_client(server_params) as (read, write):
+        # Create client session using stdio_client with ServerConfig
+        async with stdio_client(server_config) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 print("✅ Server connection established\n")

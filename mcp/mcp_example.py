@@ -26,6 +26,10 @@ class ServerConfig:
         self.args = args
         self.env = os.environ.copy()
         self.cwd = os.getcwd()
+        # Add missing attributes expected by MCP client
+        self.encoding = "utf-8"
+        self.encoding_error_handler = "strict"
+        self.stderr = None  # Let subprocess handle stderr normally
 
 # Server runner function using FastMCP's synchronous run
 def run_server_sync():

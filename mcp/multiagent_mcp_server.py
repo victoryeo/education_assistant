@@ -45,6 +45,7 @@ class MultiAgentMCPServer:
     """MCP Server wrapper for MultiAgentEducationAssistant"""
     
     def __init__(self):
+        print("Initializing MultiAgentMCPServer...")
         self.agents: Dict[str, Dict[str, Any]] = {}  # agent_key -> agent_data
         self.active_sessions: Dict[str, str] = {}  # session_id -> agent_key
 
@@ -97,6 +98,7 @@ class MultiAgentMCPServer:
         return self.agents[agent_key]
 
 # Create server instance
+print("Creating server instance...")
 server = Server("multi-agent-education-assistant")
 mcp_server = MultiAgentMCPServer()
 
@@ -540,12 +542,20 @@ async def main():
     logger.info("Starting Multi-Agent Education Assistant MCP Server...")
     
     # MCP server expects initialization_options
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            initialization_options={}
-        )
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                initialization_options={}
+            )
+    except Exception as e:
+        logger.error(f"Error running MCP server: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    except Exception as e:
+        logger.error(f"Error running MCP server: {e}")

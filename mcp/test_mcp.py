@@ -5,6 +5,18 @@ from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any, Dict
 
+# Server configuration class
+class ServerConfig:
+    def __init__(self, command: str, args: list[str]):
+        self.command = command
+        self.args = args
+        self.env = os.environ.copy()
+        self.cwd = os.getcwd()
+        # Add missing attributes expected by MCP client
+        self.encoding = "utf-8"
+        self.encoding_error_handler = "strict"
+        self.stderr = None  # Let subprocess handle stderr normally
+        self.capabilities = None
 
 async def example_client_usage():
     """Example client usage demonstrating basic MCP operations"""
@@ -135,25 +147,20 @@ async def test_mcp_server():
     ]
     
     print("=== MCP Server Test Suite ===\n")
-    
-    class ServerConfig:
-        def __init__(self, command: str, args: list[str]):
-            self.command = command
-            self.args = args
-            self.env = os.environ.copy()
-            self.cwd = os.getcwd()
         
     # Get the absolute path of the current file
-    server_file_path = os.path.abspath(__file__)
+    server_file_path = os.path.abspath("multiagent_mcp_server.py")
     
-    # --- The Fix for your error is here ---
     # Create an instance of the ServerConfig class.
     # This provides the 'command' and 'args' as attributes.
     server_config = ServerConfig(
         command=sys.executable,
-        args=[server_file_path]
+        args=[server_file_path, "--run-server"]
     )
-    print(f"Connecting to MCP server via command: '{server_config.command}' with args: {server_config.args}")
+
+    print(f"🔗 Connecting to MCP server...")
+    print(f"   Command: {server_config.command}")
+    print(f"   Args: {server_config.args}")
 
     # Connect to server and run tests
     try:

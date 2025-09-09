@@ -5,23 +5,57 @@ from mcp.server.fastmcp import FastMCP
 from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any
+from mcp.server.stdio import stdio_server
+from mcp.server import Server
+from mcp.types import Tool
+from typing import Any, List, Dict
+from mcp.types import CallToolResult, TextContent
 
 # Define a simple MCP server with a single tool
-mcp_server = FastMCP("example")
+mcp_server = Server("example")
 
-@mcp_server.tool("get_greeting")
-def get_greeting(name: str) -> str:
-    """Returns a personalized greeting."""
-    return f"Hello, {name}!"
+# Define tools
+@mcp_server.list_tools()
+async def list_tools() -> List[Tool]:
+    return [
+        Tool(
+            name="get_greeting",
+            description="Returns a personalized greeting",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Name to greet"}
+                },
+                "required": ["name"]
+            }
+        ),
+        Tool(
+            name="add_numbers",
+            description="Adds two numbers together",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "a": {"type": "number", "description": "First number"},
+                    "b": {"type": "number", "description": "Second number"}
+                },
+                "required": ["a", "b"]
+            }
+        )
+    ]
 
-@mcp_server.tool("add_numbers")
-def add_numbers(a: float, b: float) -> float:
-    """Adds two numbers together."""
-    return a + b
+@mcp_server.call_tool()
+async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
+    if name == "get_greeting":
+        return CallToolResult(content=[TextContent(text=f"Hello, {arguments['name']}!")])
+    elif name == "add_numbers":
+        result = arguments['a'] + arguments['b']
+        return CallToolResult(content=[TextContent(text=str(result))])
+    else:
+        raise ValueError(f"Unknown tool: {name}")
 
 # Server configuration class
 class ServerConfig:
-    def __init__(self, command: str, args: list[str]):
+    def __init__(self, command: str, args: List[str]):
         self.command = command
         self.args = args
         self.env = os.environ.copy()
@@ -30,14 +64,78 @@ class ServerConfig:
         self.encoding = "utf-8"
         self.encoding_error_handler = "strict"
         self.stderr = None  # Let subprocess handle stderr normally
+        self.capabilities = {
+            "tools": {},
+            "resources": {
+                "agent_capabilities": {
+                    "read": True
+                }
+            }
+        }
+
+class ServerConfig:
+    def __init__(self, command: str, args: List[str]):
+        self.command = command
+        self.args = args
+        self.env = os.environ.copy()
+        self.cwd = os.getcwd()
+        self.encoding = "utf-8"
+        self.encoding_error_handler = "strict"
+        self.stderr = None
+        self.capabilities = {
+            "tools": {},
+            "resources": {
+                "agent_capabilities": {
+                    "read": True
+                }
+            }
+        }
+        self.initialization_options = {}
+
+    def to_dict(self):
+        return {
+            'command': self.command,
+            'args': self.args,
+            'env': self.env,
+            'cwd': self.cwd,
+            'encoding': self.encoding,
+            'encoding_error_handler': self.encoding_error_handler,
+            'stderr': self.stderr,
+            'capabilities': self.capabilities,
+            'initialization_options': self.initialization_options
+        }
+
+# Server runner function using FastMCP's asynchronous run
+async def run_server_async():
+    """Run the MCP server using FastMCP synchronously"""
+    print("🚀 Starting MCP server...", file=sys.stderr)
+    try:
+        # FastMCP's run() method manages its own event loop
+        async with stdio_server() as (read_stream, write_stream):
+            await mcp_server.run(
+                read_stream=read_stream,
+                write_stream=write_stream,
+                initialization_options={}
+            )   
+    except Exception as e:
+        print(f"❌ Server error: {e}", file=sys.stderr)
+        raise
 
 # Server runner function using FastMCP's synchronous run
 def run_server_sync():
     """Run the MCP server using FastMCP synchronously"""
     print("🚀 Starting MCP server...", file=sys.stderr)
     try:
-        # FastMCP's run() method manages its own event loop
-        mcp_server.run()
+        # Get standard I/O streams
+        read_stream = sys.stdin.buffer
+        write_stream = sys.stdout.buffer
+        
+        # MCP's run() method manages its own event loop
+        asyncio.run(mcp_server.run(
+            read_stream=read_stream,
+            write_stream=write_stream,
+            initialization_options={}
+        ))
     except Exception as e:
         print(f"❌ Server error: {e}", file=sys.stderr)
         raise
@@ -96,7 +194,7 @@ async def run_server_direct():
         
         # Run the server with stdio
         async with stdio_server() as (read_stream, write_stream):
-            await server.run(read_stream, write_stream)
+            await server.run(read_stream, write_stream, initialization_options={})
             
     except Exception as e:
         print(f"❌ Direct server error: {e}", file=sys.stderr)
@@ -249,9 +347,22 @@ async def run_client():
     try:
         async with stdio_client(server_config) as (read, write):
             async with ClientSession(read, write) as session:
-                # Initialize the session
+                # Initialize the session with capabilities
                 print("🔄 Initializing session...")
-                await session.initialize()
+                await session.initialize(
+                    process_id=os.getpid(),
+                    client_info={
+                        'name': 'mcp-example-client',
+                        'version': '1.0.0'
+                    },
+                    root_uri=None,
+                    capabilities={
+                        'experimental': {},
+                        'textDocument': {},
+                        'workspace': {}
+                    },
+                    initialization_options={}
+                )
                 print("✅ Connection to server successful!")
 
                 # List available tools
@@ -278,6 +389,8 @@ async def run_client():
         import traceback
         traceback.print_exc()
         return False
+    finally:
+        print("👋 Disconnecting from server...")
     
     return True
 
@@ -287,7 +400,7 @@ def main():
         # Try different server implementations in order of preference
         try:
             # FastMCP handles its own event loop
-            run_server_sync()
+            asyncio.run(run_server_async())
         except Exception as e:
             print(f"⚠️ FastMCP failed ({e}), trying async alternatives...", file=sys.stderr)
             # Use asyncio for the fallback servers

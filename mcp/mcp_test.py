@@ -23,8 +23,15 @@ async def example_client_usage():
     """Example client usage demonstrating basic MCP operations"""
     
     print("=== MCP Client Usage Example ===\n")
+    # Get the absolute path to the server script
+    server_script = os.path.abspath("multiagent_mcp_server.py")
     
-    async with stdio_client("python", ["multiagent_mcp_server.py"]) as (read, write):
+    # Create server config
+    server_config = ServerConfig(
+        command=sys.executable,
+        args=[server_script]
+    )
+    async with stdio_client(server_config) as (read, write):
         async with ClientSession(read, write) as session:
             # Initialize session
             await session.initialize()

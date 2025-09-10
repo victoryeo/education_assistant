@@ -2,6 +2,12 @@ import asyncio
 import json
 import os
 import sys
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any, Dict
@@ -72,16 +78,50 @@ async def client_pdf_generate():
                 
             try:
                 # Try to parse as JSON
+                agent_response = None
                 response_data = json.loads(response_text)
+                print(f"Response type: {type(response_data).__name__}")
                 if isinstance(response_data, dict):
                     if 'response' in response_data:
                         print(f"✅ Agent response: {response_data['response'][:200]}...")
+                        agent_response = response_data['response']
                     elif 'message' in response_data:
                         print(f"✅ Message: {response_data['message']}")
+                        agent_response = response_data['message']
                     elif 'content' in response_data:
                         print(f"✅ Content: {response_data['content']}")
+                        response_list = response_data['content']
+                        response_dict = response_list[0]
+                        # The 'text' key holds the JSON string
+                        response_text_json = response_dict.get('text', '{}')
+                        agent_response = json.dumps(response_text_json)
                     else:
                         print(f"✅ Response data: {json.dumps(response_data, indent=2)}")
+                        agent_response = json.dumps(response_data, indent=2)
+
+                    # genetate PDF file
+                    print(f"Agent Response type: {type(agent_response).__name__}")
+                    print(agent_response)
+                    pdf_filename = "learning_report.pdf"
+                    doc = SimpleDocTemplate(pdf_filename, pagesize=letter)
+                    styles = getSampleStyleSheet()
+                    
+                    # Define a story (list of elements) to be added to the PDF
+                    story = []
+                    
+                    # Add a title and user query
+                    story.append(Paragraph("Learning Report: Photosynthesis", styles['Title']))
+                    story.append(Spacer(1, 0.2 * inch))
+                    story.append(Paragraph("<b>User Query:</b> I want to learn about photosynthesis", styles['Normal']))
+                    story.append(Spacer(1, 0.2 * inch))
+                    
+                    # Add the agent's response to the story
+                    if agent_response:
+                        story.append(Paragraph(agent_response, styles['BodyText']))
+                    
+                    # Build the PDF file
+                    doc.build(story)
+                    print(f"\n✅ PDF file '{pdf_filename}' generated successfully!")
 
                 else:
                     print(f"✅ Response: {response_data}")
@@ -89,7 +129,7 @@ async def client_pdf_generate():
                 print(f"📝 Raw response (non-JSON): {response_text[:500]}...")
                                 
             except Exception as e:
-                print(f"❌ Error reading agent capabilities: {str(e)}")
+                print(f"❌ Error reading agent: {str(e)}")
             
             print("\n✅ Example usage completed successfully!")
 

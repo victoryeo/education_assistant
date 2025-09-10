@@ -624,7 +624,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 contents=[
                     TextResourceContents(
                         uri="mcp://active_agents",
-                        text=json.dumps(capabilities, indent=2),
+                        text=json.dumps(agents_info, indent=2),
                         mimeType="application/json"
                     )
                 ]
@@ -645,7 +645,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 contents=[
                     TextResourceContents(
                         uri=f"mcp://tasks/{user_id}/{category}",
-                        text=json.dumps(capabilities, indent=2),
+                        text=json.dumps(tasks, indent=2),
                         mimeType="application/json"
                     )
                 ]
@@ -666,7 +666,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
                     contents=[
                         TextResourceContents(
                             uri=f"mcp://conversation_history/{user_id}/{category}",
-                            text=json.dumps(capabilities, indent=2),
+                            text=json.dumps(history, indent=2),
                             mimeType="application/json"
                         )
                     ]

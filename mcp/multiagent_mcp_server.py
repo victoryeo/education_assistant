@@ -650,6 +650,8 @@ async def read_resource(uri: str) -> ReadResourceResult:
                         )
                     ]
                 )
+            else:
+                raise ValueError(f"Invalid URI: {uri}")
         
         elif uri.startswith("conversation_history/"):
             logger.info("Reading conversation history...")
@@ -671,6 +673,8 @@ async def read_resource(uri: str) -> ReadResourceResult:
                         )
                     ]
                 )
+            else:
+                raise ValueError(f"Invalid URI: {uri}")
         
         else:
             logger.info("Resource not found: {uri}")

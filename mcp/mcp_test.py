@@ -45,7 +45,7 @@ async def example_client_usage():
             # List available resources
             resources = await session.list_resources()
             print(f"📚 Available resources: {[res.name for res in resources.resources]}")
-            """
+            
             # Example 1: Process a learning request
             print("\n--- Example 1: Process Learning Request ---")
             result = await session.call_tool(
@@ -133,7 +133,7 @@ async def example_client_usage():
             )
             tasks = json.loads(tasks_result.content[0].text)
             print(f"Found {len(tasks)} tasks for user")
-            """
+            
             # Example 4: Read agent capabilities
             print("\n--- Example 4: Read Agent Capabilities ---")
             try:

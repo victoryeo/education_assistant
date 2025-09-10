@@ -34,7 +34,7 @@ django_backend_path = os.path.join(current_dir, '..', 'django-backend/djangoapp'
 sys.path.append(django_backend_path)
 
 # Configure logging first
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import existing MultiAgentEducationAssistant
@@ -51,7 +51,7 @@ class MultiAgentMCPServer:
     """MCP Server wrapper for MultiAgentEducationAssistant"""
     
     def __init__(self):
-        print("Initializing MultiAgentMCPServer...")
+        logger.info("Initializing MultiAgentMCPServer...")
         self.agents: Dict[str, Dict[str, Any]] = {}  # agent_key -> agent_data
         self.active_sessions: Dict[str, str] = {}  # session_id -> agent_key
 
@@ -123,7 +123,7 @@ class MultiAgentMCPServer:
         return self.agents[agent_key]
 
 # Create server instance
-print("Creating server instance...")
+logger.info("Creating server instance...")
 server = Server("multi-agent-education-assistant")
 
 # Initialize the multi-agent server
@@ -294,7 +294,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             
             # Debug logging
             result_str = json.dumps(result, indent=2)
-            print(f"DEBUG - Sending response: {result_str}")
+            logger.info(f"DEBUG - Sending response: {result_str}")
             
             # Create a properly formatted TextContent object
             # Ensure the response is always a dictionary with a 'response' field
@@ -388,7 +388,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             
             # Convert result to JSON string for the response
             result_str = json.dumps(result, indent=2)
-            print(f"DEBUG - Sending response: {result_str}")
+            logger.info(f"DEBUG - Sending response: {result_str}")
             
             # Create TextContent with proper structure
             text_content = {
@@ -445,7 +445,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 
             # Convert result to JSON string for the response
             result_str = json.dumps(result, indent=2)
-            print(f"DEBUG - Sending response: {result_str}")
+            logger.info(f"DEBUG - Sending response: {result_str}")
             
             # Create TextContent with proper structure
             text_content = {
@@ -483,7 +483,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             
             # Convert result to JSON string for the response
             result_str = json.dumps(result, indent=2)
-            print(f"DEBUG - Sending response: {result_str}")
+            logger.info(f"DEBUG - Sending response: {result_str}")
             
             # Create TextContent with proper structure
             text_content = {

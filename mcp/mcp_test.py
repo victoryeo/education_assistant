@@ -45,7 +45,7 @@ async def example_client_usage():
             # List available resources
             resources = await session.list_resources()
             print(f"📚 Available resources: {[res.name for res in resources.resources]}")
-            
+
             # Example 1: Process a learning request
             print("\n--- Example 1: Process Learning Request ---")
             result = await session.call_tool(
@@ -285,5 +285,5 @@ if __name__ == "__main__":
     print("1. Set up your .env file with required API keys")
     print("2. Install requirements: pip install -r requirements.txt") 
     print("3. Run server: python multiagent_mcp_server.py")
-    print("4. Run tests: python test_mcp.py [mode]")
+    print("4. Run tests: python mcp_test.py [mode]")
     print("   Modes: example, test")

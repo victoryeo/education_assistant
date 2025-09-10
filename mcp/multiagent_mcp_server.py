@@ -586,41 +586,24 @@ async def read_resource(uri: str) -> ReadResourceResult:
     try:
         logger.info(f"Reading resource: {uri}")
         if "agent_capabilities" in str(uri):
-            logger.info("Reading agent capabilities...")
             capabilities = {
-                "agents": {
-                    "task_manager": "Manages task creation, updates, and tracking",
-                    "education_specialist": "Provides educational content and learning guidance",
-                    "scheduler": "Handles scheduling and deadline management", 
-                    "coordinator": "Coordinates responses between agents"
-                },
                 "supported_intents": [
                     "create", "update", "complete", "summary",
                     "schedule", "education", "query", "question"
                 ],
-                "supported_categories": [
-                    "general", "math", "science", "history",
-                    "literature", "programming", "languages"
-                ],
-                "features": [
-                    "Multi-agent collaboration",
-                    "Task management", 
-                    "Educational assistance",
-                    "Scheduling support",
-                    "Intent analysis",
-                    "Conversation history",
-                    "Real-time processing"
-                ],
-                "server_info": {
-                    "name": "multi-agent-education-assistant",
-                    "version": "1.0.0",
-                    "has_real_agents": MultiAgentEducationAssistant is not None
-                }
+                "version": "1.0",
             }
             
             logger.info("Sending agent capabilities...")
+            # Create a simple response with just the capabilities
             return ReadResourceResult(
-                contents=[TextResourceContents(uri="mcp://agent_capabilities", text=json.dumps(capabilities, indent=2))]
+                contents=[
+                    TextResourceContents(
+                        uri="mcp://agent_capabilities",
+                        text=json.dumps(capabilities, indent=2),
+                        mimeType="application/json"
+                    )
+                ]
             )
         
         elif "active_agents" in str(uri):
@@ -638,7 +621,13 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 })
             
             return ReadResourceResult(
-                contents=[TextResourceContents(uri="mcp://active_agents", text=json.dumps(agents_info, indent=2))]
+                contents=[
+                    TextResourceContents(
+                        uri="mcp://active_agents",
+                        text=json.dumps(capabilities, indent=2),
+                        mimeType="application/json"
+                    )
+                ]
             )
         
         elif uri.startswith("tasks/"):
@@ -653,8 +642,14 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 tasks = agent_data["tasks"]
                 
                 return ReadResourceResult(
-                    contents=[TextResourceContents(uri=f"mcp://tasks/{user_id}/{category}", text=json.dumps(tasks, indent=2))]
-                )
+                contents=[
+                    TextResourceContents(
+                        uri=f"mcp://tasks/{user_id}/{category}",
+                        text=json.dumps(capabilities, indent=2),
+                        mimeType="application/json"
+                    )
+                ]
+            )
         
         elif uri.startswith("conversation_history/"):
             logger.info("Reading conversation history...")
@@ -668,28 +663,37 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 history = agent_data["conversation_history"]
                 
                 return ReadResourceResult(
-                    contents=[TextResourceContents(
-                        uri=f"mcp://conversation_history/{user_id}/{category}",
-                        text=json.dumps(history, indent=2),
-                        mime_type="application/json"
-                    )]
+                    contents=[
+                        TextResourceContents(
+                            uri=f"mcp://conversation_history/{user_id}/{category}",
+                            text=json.dumps(capabilities, indent=2),
+                            mimeType="application/json"
+                        )
+                    ]
                 )
         
-        logger.info("Resource not found: {uri}")
-        return ReadResourceResult(
-            contents=[TextResourceContents(
-                uri="error:",
-                text=f"Resource not found: {uri}",
-                mime_type="text/plain"
-            )],
-            isError=True
-        )
+        else:
+            logger.info("Resource not found: {uri}")
+            return ReadResourceResult(
+                contents=[
+                    TextResourceContents(
+                        uri="mcp://error",
+                        text=f"Resource not found: {uri}",
+                        mimeType="application/json"
+                    )
+                ]
+            )
         
     except Exception as e:
         logger.error(f"Error reading resource {uri}: {e}")
         return ReadResourceResult(
-            contents=[TextResourceContents(uri="error:", text=f"Error: {str(e)}")],
-            isError=True
+            contents=[
+                TextResourceContents(
+                    uri="mcp://error",
+                    text=f"Error: {str(e)}",
+                    mimeType="application/json"
+                )
+            ]
         )
 
 async def main():
@@ -702,8 +706,11 @@ async def main():
             server_name="multi-agent-education-assistant",
             server_version="1.0.0",
             capabilities={
-                "tools": {},
-                "resources": {}
+                "supported_intents": [
+                    "create", "update", "complete", "summary",
+                    "schedule", "education", "query", "question"
+                ],
+                "version": "1.0",
             }
         )
         

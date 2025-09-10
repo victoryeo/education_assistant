@@ -642,14 +642,14 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 tasks = agent_data["tasks"]
                 
                 return ReadResourceResult(
-                contents=[
-                    TextResourceContents(
-                        uri=f"mcp://tasks/{user_id}/{category}",
-                        text=json.dumps(tasks, indent=2),
-                        mimeType="application/json"
-                    )
-                ]
-            )
+                    contents=[
+                        TextResourceContents(
+                            uri=f"mcp://tasks/{user_id}/{category}",
+                            text=json.dumps(tasks, indent=2),
+                            mimeType="application/json"
+                        )
+                    ]
+                )
         
         elif uri.startswith("conversation_history/"):
             logger.info("Reading conversation history...")

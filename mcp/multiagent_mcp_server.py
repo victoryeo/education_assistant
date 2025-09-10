@@ -21,7 +21,8 @@ from mcp.types import (
     Tool,
     Resource,
     CallToolResult,
-    ReadResourceResult
+    ReadResourceResult,
+    TextResourceContents
 )
 # Import MCP types for initialization
 from mcp.server import InitializationOptions
@@ -561,7 +562,7 @@ async def list_resources() -> list[Resource]:
         ),
         Resource(
             uri="mcp://conversation_history/{user_id}/{category}",
-            name="Conversation History", 
+            name="Conversation History",
             description="Get conversation history for a specific user and category",
             mimeType="application/json"
         ),
@@ -583,7 +584,9 @@ async def list_resources() -> list[Resource]:
 async def read_resource(uri: str) -> ReadResourceResult:
     """Read a specific resource"""
     try:
-        if uri == "agent_capabilities":
+        logger.info(f"Reading resource: {uri}")
+        if "agent_capabilities" in str(uri):
+            logger.info("Reading agent capabilities...")
             capabilities = {
                 "agents": {
                     "task_manager": "Manages task creation, updates, and tracking",
@@ -615,11 +618,13 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 }
             }
             
+            logger.info("Sending agent capabilities...")
             return ReadResourceResult(
-                contents=[TextContent(text=json.dumps(capabilities, indent=2))]
+                contents=[TextResourceContents(uri="mcp://agent_capabilities", text=json.dumps(capabilities, indent=2))]
             )
         
-        elif uri == "active_agents":
+        elif "active_agents" in str(uri):
+            logger.info("Reading active agents...")
             agents_info = []
             for agent_key, agent_data in mcp_server.agents.items():
                 agents_info.append({
@@ -633,10 +638,11 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 })
             
             return ReadResourceResult(
-                contents=[TextContent(text=json.dumps(agents_info, indent=2))]
+                contents=[TextResourceContents(uri="mcp://active_agents", text=json.dumps(agents_info, indent=2))]
             )
         
         elif uri.startswith("tasks/"):
+            logger.info("Reading tasks...")
             # Parse URI: tasks/{user_id}/{category}
             parts = uri.split("/")
             if len(parts) >= 3:
@@ -647,10 +653,11 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 tasks = agent_data["tasks"]
                 
                 return ReadResourceResult(
-                    contents=[TextContent(text=json.dumps(tasks, indent=2))]
+                    contents=[TextResourceContents(uri=f"mcp://tasks/{user_id}/{category}", text=json.dumps(tasks, indent=2))]
                 )
         
         elif uri.startswith("conversation_history/"):
+            logger.info("Reading conversation history...")
             # Parse URI: conversation_history/{user_id}/{category}
             parts = uri.split("/")
             if len(parts) >= 3:
@@ -661,20 +668,19 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 history = agent_data["conversation_history"]
                 
                 return ReadResourceResult(
-                    contents=[TextContent(
-                        type="text",
+                    contents=[TextResourceContents(
+                        uri=f"mcp://conversation_history/{user_id}/{category}",
                         text=json.dumps(history, indent=2),
-                        annotations=None,
-                        meta={"mimeType": "application/json"}
+                        mime_type="application/json"
                     )]
                 )
         
+        logger.info("Resource not found: {uri}")
         return ReadResourceResult(
-            contents=[TextContent(
-                type="text",
+            contents=[TextResourceContents(
+                uri="error:",
                 text=f"Resource not found: {uri}",
-                annotations=None,
-                meta={"mimeType": "application/json"}
+                mime_type="text/plain"
             )],
             isError=True
         )
@@ -682,7 +688,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
     except Exception as e:
         logger.error(f"Error reading resource {uri}: {e}")
         return ReadResourceResult(
-            contents=[TextContent(text=f"Error: {str(e)}")],
+            contents=[TextResourceContents(uri="error:", text=f"Error: {str(e)}")],
             isError=True
         )
 

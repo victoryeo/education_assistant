@@ -26,6 +26,7 @@ from mcp.types import (
 )
 # Import MCP types for initialization
 from mcp.server import InitializationOptions
+from pydantic import AnyUrl
 
 # Get the absolute path of the parent directory of Django app
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -581,7 +582,7 @@ async def list_resources() -> list[Resource]:
     ]
 
 @server.read_resource()
-async def read_resource(uri: str) -> ReadResourceResult:
+async def read_resource(uri: AnyUrl) -> str | bytes:
     """Read a specific resource"""
     try:
         logger.info(f"Reading resource: {uri}")
@@ -596,15 +597,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
             
             logger.info("Sending agent capabilities...")
             # Create a simple response with just the capabilities
-            return ReadResourceResult(
-                contents=[
-                    TextResourceContents(
-                        uri="mcp://agent_capabilities",
-                        text=json.dumps(capabilities, indent=2),
-                        mimeType="application/json"
-                    )
-                ]
-            )
+            return json.dumps(capabilities, indent=2)
         
         elif "active_agents" in str(uri):
             logger.info("Reading active agents...")
@@ -620,15 +613,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
                     "has_real_instance": agent_data["instance"] is not None
                 })
             
-            return ReadResourceResult(
-                contents=[
-                    TextResourceContents(
-                        uri="mcp://active_agents",
-                        text=json.dumps(agents_info, indent=2),
-                        mimeType="application/json"
-                    )
-                ]
-            )
+            return json.dumps(agents_info, indent=2)
         
         elif uri.startswith("tasks/"):
             logger.info("Reading tasks...")
@@ -641,15 +626,7 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 agent_data = await mcp_server._get_or_create_agent(user_id, category)
                 tasks = agent_data["tasks"]
                 
-                return ReadResourceResult(
-                    contents=[
-                        TextResourceContents(
-                            uri=f"mcp://tasks/{user_id}/{category}",
-                            text=json.dumps(tasks, indent=2),
-                            mimeType="application/json"
-                        )
-                    ]
-                )
+                return json.dumps(tasks, indent=2)
             else:
                 raise ValueError(f"Invalid URI: {uri}")
         
@@ -664,41 +641,17 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 agent_data = await mcp_server._get_or_create_agent(user_id, category)
                 history = agent_data["conversation_history"]
                 
-                return ReadResourceResult(
-                    contents=[
-                        TextResourceContents(
-                            uri=f"mcp://conversation_history/{user_id}/{category}",
-                            text=json.dumps(history, indent=2),
-                            mimeType="application/json"
-                        )
-                    ]
-                )
+                return json.dumps(history, indent=2)
             else:
                 raise ValueError(f"Invalid URI: {uri}")
         
         else:
             logger.info("Resource not found: {uri}")
-            return ReadResourceResult(
-                contents=[
-                    TextResourceContents(
-                        uri="mcp://error",
-                        text=f"Resource not found: {uri}",
-                        mimeType="application/json"
-                    )
-                ]
-            )
+            return f"Resource not found: {uri}"
         
     except Exception as e:
         logger.error(f"Error reading resource {uri}: {e}")
-        return ReadResourceResult(
-            contents=[
-                TextResourceContents(
-                    uri="mcp://error",
-                    text=f"Error: {str(e)}",
-                    mimeType="application/json"
-                )
-            ]
-        )
+        return f"Error reading resource {uri}: {e}"
 
 async def main():
     """Main entry point for the MCP server"""

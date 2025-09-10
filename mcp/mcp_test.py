@@ -55,23 +55,71 @@ async def example_client_usage():
                     "category": "biology"
                 }
             )
-            response_data = json.loads(result.content[0].text)
-            print(f"Agent response: {response_data['response'][:100]}...")
+            # Handle the response content
+            if not result.content:
+                print("Error: Empty response received from server")
+                return
+                
+            response_text = result.content[0].text
+            print(f"\n--- Raw Response ---\n{response_text}\n--- End Raw Response ---\n")
+            
+            # Check for validation errors in the response
+            if "validation error" in response_text.lower() or "validation_error" in response_text.lower():
+                print("⚠️ Validation error in response:")
+                print(response_text)
+                return
+                
+            try:
+                # Try to parse as JSON
+                response_data = json.loads(response_text)
+                if isinstance(response_data, dict):
+                    if 'response' in response_data:
+                        print(f"✅ Agent response: {response_data['response'][:200]}...")
+                    elif 'message' in response_data:
+                        print(f"✅ Message: {response_data['message']}")
+                    else:
+                        print(f"✅ Response data: {json.dumps(response_data, indent=2)}")
+                else:
+                    print(f"✅ Response: {response_data}")
+            except json.JSONDecodeError:
+                print(f"📝 Raw response (non-JSON): {response_text[:500]}...")
             
             # Example 2: Create a specific task
-            print("\n--- Example 2: Create Task ---")
-            task_result = await session.call_tool(
-                "create_task",
-                {
-                    "title": "Study cell structure diagram",
-                    "user_id": "demo_user",
-                    "description": "Review and memorize parts of plant and animal cells",
-                    "category": "biology",
-                    "priority": "high"
-                }
-            )
-            task_data = json.loads(task_result.content[0].text)
-            print(f"Created task: {task_data['created_task']['title']}")
+            print("\n--- Creating Task ---")
+            try:
+                task_result = await session.call_tool(
+                    "create_task",
+                    {
+                        "title": "Study cell structure diagram",
+                        "user_id": "demo_user",
+                        "description": "Review and memorize parts of plant and animal cells",
+                        "category": "biology",
+                        "priority": "high"
+                    }
+                )
+                
+                if not task_result.content:
+                    print("Error: Empty response for task creation")
+                    return
+                    
+                task_response = task_result.content[0].text
+                print(f"\n--- Task Response ---\n{task_response}\n--- End Task Response ---\n")
+                
+                try:
+                    task_data = json.loads(task_response)
+                    if 'message' in task_data:
+                        print(f"✅ {task_data['message']}")
+                    elif 'created_task' in task_data:
+                        print(f"✅ Created task: {task_data['created_task'].get('title', 'Untitled')}")
+                        print(f"   Task ID: {task_data['created_task'].get('id', 'N/A')}")
+                        print(f"   Status: {task_data['created_task'].get('status', 'unknown')}")
+                    else:
+                        print(f"✅ Task created: {json.dumps(task_data, indent=2)}")
+                except json.JSONDecodeError:
+                    print(f"📝 Task response (non-JSON): {task_response[:500]}...")
+                    
+            except Exception as e:
+                print(f"❌ Error creating task: {str(e)}")
             
             # Example 3: Get tasks
             print("\n--- Example 3: Get User Tasks ---")
@@ -87,7 +135,7 @@ async def example_client_usage():
             
             # Example 4: Read agent capabilities
             print("\n--- Example 4: Read Agent Capabilities ---")
-            capabilities = await session.read_resource("agent_capabilities")
+            capabilities = await session.read_resource("mcp://agent_capabilities")
             cap_data = json.loads(capabilities.contents[0].text)
             print(f"Server supports {len(cap_data['supported_intents'])} intent types")
             

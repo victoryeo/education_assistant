@@ -294,7 +294,28 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             result_str = json.dumps(result, indent=2)
             print(f"DEBUG - Sending response: {result_str}")
             
-            return CallToolResult(content=[TextContent(type="text", text=result_str)])
+            # Create a properly formatted TextContent object
+            # Ensure the response is always a dictionary with a 'response' field
+            if not isinstance(result, dict):
+                result = {"response": str(result)}
+            
+            # Convert to JSON string for the text content
+            response_json = json.dumps(result, indent=2)
+            
+            # Create TextContent with proper structure
+            text_content = {
+                "type": "text",
+                "text": response_json,
+                "annotations": None,
+                "meta": {"mimeType": "application/json"}
+            }
+            
+            # Return as a dictionary that can be properly serialized
+            return {
+                "content": [text_content],
+                "structuredContent": result,
+                "isError": False
+            }
         
         elif name == "get_tasks":
             user_id = arguments["user_id"]
@@ -307,7 +328,32 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             if status:
                 tasks = [t for t in tasks if t.get('status') == status]
             
-            return CallToolResult(content=[TextContent(text=json.dumps(tasks, indent=2))])
+            # Prepare the result dictionary
+            result = {
+                "tasks": tasks,
+                "user_id": user_id,
+                "category": category,
+                "count": len(tasks),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Convert result to JSON string for the response
+            result_str = json.dumps(result, indent=2)
+            
+            # Create TextContent with proper structure
+            text_content = {
+                "type": "text",
+                "text": result_str,
+                "annotations": None,
+                "meta": {"mimeType": "application/json"}
+            }
+            
+            # Return as a dictionary that can be properly serialized
+            return {
+                "content": [text_content],
+                "structuredContent": result,
+                "isError": False
+            }
         
         elif name == "create_task":
             title = arguments["title"]
@@ -333,11 +379,29 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             agent_data["tasks"].append(new_task)
             
             result = {
+                "task": new_task,
                 "message": f"Created task: {title}",
-                "created_task": new_task
+                "timestamp": datetime.now().isoformat()
             }
             
-            return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, indent=2))])
+            # Convert result to JSON string for the response
+            result_str = json.dumps(result, indent=2)
+            print(f"DEBUG - Sending response: {result_str}")
+            
+            # Create TextContent with proper structure
+            text_content = {
+                "type": "text",
+                "text": result_str,
+                "annotations": None,
+                "meta": {"mimeType": "application/json"}
+            }
+            
+            # Return as a dictionary that can be properly serialized
+            return {
+                "content": [text_content],
+                "structuredContent": result,
+                "isError": False
+            }
         
         elif name == "update_task":
             task_id = arguments["task_id"]
@@ -364,18 +428,37 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                     
                     task["updated_at"] = datetime.now().isoformat()
                     
-                    result = {
-                        "message": f"Updated task: {task['title']}",
-                        "updated_task": task
-                    }
-                    break
-            
-            if not task_found:
+            if task_found:
                 result = {
-                    "error": f"Task with ID {task_id} not found"
+                    "task": task,
+                    "message": f"Updated task {task_id}",
+                    "timestamp": datetime.now().isoformat()
                 }
+            else:
+                result = {
+                    "error": True,
+                    "message": f"Task {task_id} not found",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+            # Convert result to JSON string for the response
+            result_str = json.dumps(result, indent=2)
+            print(f"DEBUG - Sending response: {result_str}")
             
-            return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, indent=2))])
+            # Create TextContent with proper structure
+            text_content = {
+                "type": "text",
+                "text": result_str,
+                "annotations": None,
+                "meta": {"mimeType": "application/json"}
+            }
+            
+            # Return as a dictionary that can be properly serialized
+            return {
+                "content": [text_content],
+                "structuredContent": result,
+                "isError": result.get("error", False)
+            }
         
         elif name == "get_agent_status":
             user_id = arguments["user_id"]
@@ -383,69 +466,88 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             
             agent_data = await mcp_server._get_or_create_agent(user_id, category)
             
-            status = {
+            result = {
                 "user_id": user_id,
                 "category": category,
-                "tasks_count": len(agent_data["tasks"]),
-                "conversation_length": len(agent_data["conversation_history"]),
+                "active": True,
+                "task_count": len(agent_data.get("tasks", [])),
+                "last_activity": agent_data.get("last_activity", "Never"),
+                "conversation_length": len(agent_data.get("conversation_history", [])),
                 "agent_key": mcp_server._get_agent_key(user_id, category),
-                "created_at": agent_data["created_at"],
-                "has_real_agent": agent_data["instance"] is not None,
+                "created_at": agent_data.get("created_at", "Unknown"),
+                "has_real_agent": agent_data.get("instance") is not None,
                 "timestamp": datetime.now().isoformat()
             }
             
-            return CallToolResult(content=[TextContent(text=json.dumps(status, indent=2))])
-        
-        elif name == "analyze_intent":
-            user_input = arguments["user_input"]
-            user_id = arguments["user_id"]
-            category = arguments.get("category", "general")
+            # Convert result to JSON string for the response
+            result_str = json.dumps(result, indent=2)
+            print(f"DEBUG - Sending response: {result_str}")
             
-            # Intent analysis logic
-            user_input_lower = user_input.lower()
-            confidence = 0.8
-            
-            if any(keyword in user_input_lower for keyword in ["create", "add", "new", "todo"]):
-                intent = "create"
-            elif any(keyword in user_input_lower for keyword in ["update", "modify", "change", "edit"]):
-                intent = "update"
-            elif any(keyword in user_input_lower for keyword in ["complete", "done", "finished", "mark"]):
-                intent = "complete"
-            elif any(keyword in user_input_lower for keyword in ["summary", "list", "show", "overview"]):
-                intent = "summary"
-            elif any(keyword in user_input_lower for keyword in ["schedule", "deadline", "priority", "when"]):
-                intent = "schedule"
-            elif any(keyword in user_input_lower for keyword in ["learn", "study", "education", "course"]):
-                intent = "education"
-            elif "?" in user_input:
-                intent = "question"
-            else:
-                intent = "query"
-                confidence = 0.5
-            
-            result = {
-                "intent": intent,
-                "confidence": confidence,
-                "user_input": user_input,
-                "user_id": user_id,
-                "category": category,
-                "analysis_timestamp": datetime.now().isoformat()
+            # Create TextContent with proper structure
+            text_content = {
+                "type": "text",
+                "text": result_str,
+                "annotations": None,
+                "meta": {"mimeType": "application/json"}
             }
             
-            return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, indent=2))])
+            # Return as a dictionary that can be properly serialized
+            return {
+                "content": [text_content],
+                "structuredContent": result,
+                "isError": False
+            }
         
         else:
-            return CallToolResult(
-                content=[TextContent(text=f"Unknown tool: {name}")],
-                isError=True
-            )
+            error_result = {
+                "error": True,
+                "message": f"Unknown tool: {name}",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Convert error to JSON string for the response
+            error_str = json.dumps(error_result, indent=2)
+            
+            # Create TextContent with proper structure
+            text_content = {
+                "type": "text",
+                "text": error_str,
+                "annotations": None,
+                "meta": {"mimeType": "application/json"}
+            }
+            
+            # Return as a dictionary that can be properly serialized
+            return {
+                "content": [text_content],
+                "structuredContent": error_result,
+                "isError": True
+            }
             
     except Exception as e:
         logger.error(f"Error in tool {name}: {e}")
-        return CallToolResult(
-            content=[TextContent(text=f"Error: {str(e)}")],
-            isError=True
-        )
+        error_result = {
+            "error": True,
+            "message": f"Error in tool {name}: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Convert error to JSON string for the response
+        error_str = json.dumps(error_result, indent=2)
+        
+        # Create TextContent with proper structure
+        text_content = {
+            "type": "text",
+            "text": error_str,
+            "annotations": None,
+            "meta": {"mimeType": "application/json"}
+        }
+        
+        # Return as a dictionary that can be properly serialized
+        return {
+            "content": [text_content],
+            "structuredContent": error_result,
+            "isError": True
+        }
 
 @server.list_resources()
 async def list_resources() -> list[Resource]:
@@ -559,11 +661,21 @@ async def read_resource(uri: str) -> ReadResourceResult:
                 history = agent_data["conversation_history"]
                 
                 return ReadResourceResult(
-                    contents=[TextContent(text=json.dumps(history, indent=2))]
+                    contents=[TextContent(
+                        type="text",
+                        text=json.dumps(history, indent=2),
+                        annotations=None,
+                        meta={"mimeType": "application/json"}
+                    )]
                 )
         
         return ReadResourceResult(
-            contents=[TextContent(text=f"Resource not found: {uri}")],
+            contents=[TextContent(
+                type="text",
+                text=f"Resource not found: {uri}",
+                annotations=None,
+                meta={"mimeType": "application/json"}
+            )],
             isError=True
         )
         

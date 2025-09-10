@@ -13,33 +13,37 @@ from datetime import datetime
 import os
 import uuid
 import sys
-from mcp.server import Server
+from mcp.server.lowlevel.server import Server
+from mcp.types import Resource
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     TextContent,
     Tool,
     Resource,
     CallToolResult,
-    ListResourcesResult,
-    ListToolsResult,
     ReadResourceResult
 )
+# Import MCP types for initialization
+from mcp.server import InitializationOptions
 
 # Get the absolute path of the parent directory of Django app
 current_dir = os.path.dirname(os.path.abspath(__file__))
 django_backend_path = os.path.join(current_dir, '..', 'django-backend/djangoapp')
 sys.path.append(django_backend_path)
 
+# Configure logging first
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # Import existing MultiAgentEducationAssistant
+MultiAgentEducationAssistant = None
 try:
     from multi_agent_assistant import MultiAgentEducationAssistant
-except ImportError:
-    logger.warning("Could not import MultiAgentEducationAssistant, using mock implementation")
+    logger.info("Successfully imported MultiAgentEducationAssistant from multi_agent_assistant")
+except Exception as e:
+    logger.warning(f"Could not import MultiAgentEducationAssistant: {str(e)}.")
     MultiAgentEducationAssistant = None
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Logger already configured at the top
 
 class MultiAgentMCPServer:
     """MCP Server wrapper for MultiAgentEducationAssistant"""
@@ -53,31 +57,55 @@ class MultiAgentMCPServer:
         """Generate unique agent key"""
         return f"{user_id}_{category}"
     
-    async def _get_or_create_agent(self, user_id: str, category: str, role_prompt: Optional[str] = None):
+    async def _get_or_create_agent(self, user_id: str, category: str, role_prompt: Optional[str] = None) -> Dict[str, Any]:
         """Get existing agent or create new one"""
+        logger.info(f"🔑 _get_or_create_agent called with user_id={user_id}, category={category}")
         agent_key = self._get_agent_key(user_id, category)
+        logger.info(f"🔑 Agent key: {agent_key}")
         
         if agent_key not in self.agents:
-            if not role_prompt:
-                role_prompt = f"You are an educational assistant specializing in {category}."
-            
+            logger.info(f"🆕 Creating new agent for user {user_id}, category {category}")
             try:
-                if MultiAgentEducationAssistant:
-                    # Use real implementation
-                    agent_instance = MultiAgentEducationAssistant(
-                        role_prompt=role_prompt,
-                        category=category,
-                        user_id=user_id
-                    )
-                    self.agents[agent_key] = {
-                        "instance": agent_instance,
-                        "user_id": user_id,
-                        "category": category,
-                        "role_prompt": role_prompt,
-                        "tasks": [],
-                        "conversation_history": [],
-                        "created_at": datetime.now().isoformat()
-                    }
+                logger.info("🔍 Checking MultiAgentEducationAssistant class...")
+                if MultiAgentEducationAssistant is not None:
+                    logger.info("✅ Using real MultiAgentEducationAssistant implementation")
+                    try:
+                        # Use real implementation
+                        logger.info("🛠️  Creating MultiAgentEducationAssistant instance...")
+                        try:
+                            logger.info("🔄 Attempting to create MultiAgentEducationAssistant instance...")
+                            agent = MultiAgentEducationAssistant(
+                                user_id=user_id,
+                                category=category,
+                                role_prompt=role_prompt or f"You are an educational assistant specializing in {category}."
+                            )
+                            logger.info("✅ Successfully created MultiAgentEducationAssistant instance")
+                        except TypeError as e:
+                            logger.error(f"❌ TypeError creating agent: {str(e)}")
+                            logger.error("This might be due to incorrect parameters. Available parameters: user_id, category, role_prompt")
+                            raise
+                        except Exception as e:
+                            logger.error(f"❌ Unexpected error creating agent: {str(e)}")
+                            raise
+                        
+                        # Initialize the agent
+                        logger.info("🔄 Initializing agent...")
+                        await agent.initialize()
+                        logger.info("✅ Agent initialized successfully")
+                        
+                        # Store agent data
+                        logger.info("💾 Storing agent data...")
+                        self.agents[agent_key] = {
+                            "instance": agent,
+                            "conversation_history": [],
+                            "tasks": [],
+                            "created_at": datetime.now().isoformat(),
+                            "last_accessed": datetime.now().isoformat()
+                        }
+                        logger.info("✅ Agent data stored successfully")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to create agent: {str(e)}")
+                        raise
                 else:
                     # Use mock implementation
                     self.agents[agent_key] = {
@@ -103,13 +131,6 @@ server = Server("multi-agent-education-assistant")
 
 # Initialize the multi-agent server
 mcp_server = MultiAgentMCPServer()
-
-# Enable debugging
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-# Import MCP types for initialization
-from mcp.server import InitializationOptions
 
 @server.list_tools()
 async def list_tools() -> List[Tool]:
@@ -204,14 +225,24 @@ async def list_tools() -> List[Tool]:
 @server.call_tool()
 async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
     """Handle tool calls"""
+    logger.info(f"🔧 call_tool called with name={name}, arguments={arguments}")
     try:
         if name == "process_message":
+            logger.info("📨 Processing process_message request")
             user_input = arguments["user_input"]
             user_id = arguments["user_id"]
             category = arguments.get("category", "general")
             role_prompt = arguments.get("role_prompt")
+            logger.info(f"📝 Message details - user_input: {user_input[:50]}..., user_id: {user_id}, category: {category}")
             
-            agent_data = await mcp_server._get_or_create_agent(user_id, category, role_prompt)
+            logger.info("🔍 Getting or creating agent...")
+            
+            try:
+                agent_data = await mcp_server._get_or_create_agent(user_id, category, role_prompt)
+                logger.info("✅ Successfully got/created agent")
+            except Exception as e:
+                logger.error(f"❌ Failed to get/create agent: {str(e)}")
+                raise
             
             # Add to conversation history
             agent_data["conversation_history"].append({
@@ -264,7 +295,11 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 "timestamp": datetime.now().isoformat()
             }
             
-            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+            # Debug logging
+            result_str = json.dumps(result, indent=2)
+            print(f"DEBUG - Sending response: {result_str}")
+            
+            return CallToolResult(content=[TextContent(type="text", text=result_str)])
         
         elif name == "get_tasks":
             user_id = arguments["user_id"]
@@ -307,7 +342,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 "created_task": new_task
             }
             
-            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+            return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, indent=2))])
         
         elif name == "update_task":
             task_id = arguments["task_id"]
@@ -345,7 +380,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                     "error": f"Task with ID {task_id} not found"
                 }
             
-            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+            return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, indent=2))])
         
         elif name == "get_agent_status":
             user_id = arguments["user_id"]
@@ -402,7 +437,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 "analysis_timestamp": datetime.now().isoformat()
             }
             
-            return CallToolResult(content=[TextContent(text=json.dumps(result, indent=2))])
+            return CallToolResult(content=[TextContent(type="text", text=json.dumps(result, indent=2))])
         
         else:
             return CallToolResult(
@@ -418,36 +453,34 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
         )
 
 @server.list_resources()
-async def list_resources() -> ListResourcesResult:
+async def list_resources() -> list[Resource]:
     """List available resources"""
-    return ListResourcesResult(
-        resources=[
-            Resource(
-                uri="tasks/{user_id}/{category}",
-                name="User Tasks",
-                description="Get all tasks for a specific user and category",
-                mimeType="application/json"
-            ),
-            Resource(
-                uri="conversation_history/{user_id}/{category}",
-                name="Conversation History", 
-                description="Get conversation history for a specific user and category",
-                mimeType="application/json"
-            ),
-            Resource(
-                uri="agent_capabilities",
-                name="Agent Capabilities",
-                description="Information about multi-agent system capabilities",
-                mimeType="application/json"
-            ),
-            Resource(
-                uri="active_agents",
-                name="Active Agents",
-                description="List of all currently active agents",
-                mimeType="application/json"
-            )
-        ]
-    )
+    return [
+        Resource(
+            uri="mcp://tasks/{user_id}/{category}",
+            name="User Tasks",
+            description="Get all tasks for a specific user and category",
+            mimeType="application/json"
+        ),
+        Resource(
+            uri="mcp://conversation_history/{user_id}/{category}",
+            name="Conversation History", 
+            description="Get conversation history for a specific user and category",
+            mimeType="application/json"
+        ),
+        Resource(
+            uri="mcp://agent_capabilities",
+            name="Agent Capabilities",
+            description="Information about multi-agent system capabilities",
+            mimeType="application/json"
+        ),
+        Resource(
+            uri="mcp://active_agents",
+            name="Active Agents",
+            description="List of all currently active agents",
+            mimeType="application/json"
+        )
+    ]
 
 @server.read_resource()
 async def read_resource(uri: str) -> ReadResourceResult:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any, Dict
@@ -85,7 +86,7 @@ async def example_client_usage():
                 print(f"📝 Raw response (non-JSON): {response_text[:500]}...")
             
             # Example 2: Create a specific task
-            print("\n--- Creating Task ---")
+            print("\n---Example 2: Creating Task ---")
             try:
                 task_result = await session.call_tool(
                     "create_task",
@@ -256,9 +257,7 @@ async def test_mcp_server():
         print("Make sure the server is running: python multiagent_mcp_server.py")
 
 # Main execution
-if __name__ == "__main__":
-    import sys
-    
+if __name__ == "__main__":    
     if len(sys.argv) > 1:
         mode = sys.argv[1].lower()
         

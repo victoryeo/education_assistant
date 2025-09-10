@@ -137,9 +137,16 @@ async def example_client_usage():
             # Example 4: Read agent capabilities
             print("\n--- Example 4: Read Agent Capabilities ---")
             try:
-                capabilities = await session.read_resource("mcp://agent_capabilities")
-                cap_data = json.loads(capabilities.contents[0].text)
+                response = await session.read_resource("mcp://agent_capabilities")
+                print(f"Response type: {type(response).__name__}")
+                cap_data = json.loads(response.contents[0].text)
                 print(f"Server supports {len(cap_data['supported_intents'])} intent types")
+
+                # Debug the response object
+                print("\n=== Response Debug ===")
+                print(f"Response: {response}")
+                print(f"Dir: {dir(response)}")
+                                
             except Exception as e:
                 print(f"❌ Error reading agent capabilities: {str(e)}")
             

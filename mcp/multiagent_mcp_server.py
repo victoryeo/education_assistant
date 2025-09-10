@@ -88,11 +88,6 @@ class MultiAgentMCPServer:
                             logger.error(f"❌ Unexpected error creating agent: {str(e)}")
                             raise
                         
-                        # Initialize the agent
-                        logger.info("🔄 Initializing agent...")
-                        await agent.initialize()
-                        logger.info("✅ Agent initialized successfully")
-                        
                         # Store agent data
                         logger.info("💾 Storing agent data...")
                         self.agents[agent_key] = {

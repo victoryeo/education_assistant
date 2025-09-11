@@ -14,7 +14,87 @@ from typing import Any, Dict
 from mcp import ClientSession, StdioServerParameters
 from pptx import Presentation
 from pptx.util import Inches, Pt
+import textwrap
 
+def create_learning_report_ppt(user_query, agent_response, filename="learning_report.pptx"):
+    """
+    Creates a PowerPoint presentation with slides for every 60 characters of agent response.
+    
+    Args:
+        user_query (str): The user's query
+        agent_response (str): The agent's response
+        filename (str): Output filename for the presentation
+    """
+    prs = Presentation()
+    
+    # Convert agent_response to string if it's not already
+    response_text = agent_response if isinstance(agent_response, str) else str(agent_response)
+    
+    # Split the response into chunks of 60 characters
+    chunks = textwrap.wrap(response_text, width=600, break_long_words=False, break_on_hyphens=False)
+    
+    # If response is shorter than 60 chars, still create at least one slide
+    if not chunks and response_text:
+        chunks = [response_text]
+    elif not chunks:
+        chunks = ["No response provided"]
+    
+    for i, chunk in enumerate(chunks):
+        # Use blank layout for each slide
+        slide_layout = prs.slide_layouts[5]
+        slide = prs.slides.add_slide(slide_layout)
+        
+        # Add title with slide number
+        title = slide.shapes.title
+        if len(chunks) > 1:
+            title.text = f"Learning Report: Photosynthesis (Part {i+1}/{len(chunks)})"
+        else:
+            title.text = "Learning Report: Photosynthesis"
+        
+        # Set up dimensions
+        left = Inches(1)    # 1 inch left margin
+        top = Inches(1.5)   # Start below title
+        width = Inches(7.5) # Slide width minus margins
+        height = Inches(5)  # Reasonable height for content
+        
+        # Add text box for the content
+        txBox = slide.shapes.add_textbox(left, top, width, height)
+        tf = txBox.text_frame
+        tf.word_wrap = True
+        
+        # Add user query (only on first slide)
+        if i == 0:
+            p = tf.add_paragraph()
+            p.text = f"User Query: {user_query}"
+            p.font.bold = True
+            p.font.size = Pt(14)
+            p.space_after = Pt(12)
+            
+            # Add separator
+            p = tf.add_paragraph()
+            p.text = "Response:"
+            p.font.bold = True
+            p.font.size = Pt(12)
+            p.space_after = Pt(8)
+        
+        # Add the chunk of agent response
+        p = tf.add_paragraph()
+        p.text = chunk
+        p.font.size = Pt(12)
+        p.space_after = Pt(8)
+        
+        # Add continuation indicator if not the last slide
+        if i < len(chunks) - 1:
+            p = tf.add_paragraph()
+            p.text = "... (continued on next slide)"
+            p.font.italic = True
+            p.font.size = Pt(9)
+    
+    # Save the presentation
+    prs.save(filename)
+    print(f"✅ PowerPoint file '{filename}' generated successfully!")
+    print(f"📊 Created {len(chunks)} slide(s) for {len(response_text)} characters of content")
+    
 # Server configuration class
 class ServerConfig:
     def __init__(self, command: str, args: list[str]):
@@ -126,39 +206,7 @@ async def client_pdf_generate():
                     print(f"\n✅ PDF file '{pdf_filename}' generated successfully!")
 
                     # generate PPT file
-                    prs = Presentation()
-                    slide_layout = prs.slide_layouts[5]  # Using blank layout
-                    slide = prs.slides.add_slide(slide_layout)
-                    
-                    # Add title
-                    title = slide.shapes.title
-                    title.text = "Learning Report: Photosynthesis"
-                    
-                    # Add content
-                    left = width = height = Inches(1)  # 1 inch margin
-                    top = Inches(1.5)
-                    width = Inches(8.5)  # Slide width minus margins
-                    height = Inches(5)    # Reasonable height for content
-                    
-                    # Add text box for the content
-                    txBox = slide.shapes.add_textbox(left, top, width, height)
-                    tf = txBox.text_frame
-                    
-                    # Add user query
-                    p = tf.add_paragraph()
-                    p.text = "User Query: I want to learn about photosynthesis"
-                    p.font.bold = True
-                    
-                    # Add agent response
-                    if agent_response:
-                        p = tf.add_paragraph()
-                        p.text = agent_response if isinstance(agent_response, str) else str(agent_response)
-                        p.space_after = Pt(12)  # Add some space after the paragraph
-                    
-                    # Save the presentation
-                    pptx_filename = "learning_report.pptx"
-                    prs.save(pptx_filename)
-                    print(f"✅ PowerPoint file '{pptx_filename}' generated successfully!")
+                    create_learning_report_ppt("I want to learn about photosynthesis", agent_response)
                     
                 else:
                     print(f"✅ Response: {response_data}")

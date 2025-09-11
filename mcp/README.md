@@ -9,5 +9,8 @@ python mcp_test.py
 To run the MCP client example that talks to a Sample MCP server, use the following command:
 python mcp_example.py
 
+To run the MCP client example that generates pdf file, use the following command:
+python mcp_pdf.py
+
 The calculator_server.py file is a MCP server implementation for a calculator server. It provides a MCP interface for interacting with the calculator server.
 

@@ -12,6 +12,8 @@ from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 from typing import Any, Dict
 from mcp import ClientSession, StdioServerParameters
+from pptx import Presentation
+from pptx.util import Inches, Pt
 
 # Server configuration class
 class ServerConfig:
@@ -123,6 +125,41 @@ async def client_pdf_generate():
                     doc.build(story)
                     print(f"\n✅ PDF file '{pdf_filename}' generated successfully!")
 
+                    # generate PPT file
+                    prs = Presentation()
+                    slide_layout = prs.slide_layouts[5]  # Using blank layout
+                    slide = prs.slides.add_slide(slide_layout)
+                    
+                    # Add title
+                    title = slide.shapes.title
+                    title.text = "Learning Report: Photosynthesis"
+                    
+                    # Add content
+                    left = width = height = Inches(1)  # 1 inch margin
+                    top = Inches(1.5)
+                    width = Inches(8.5)  # Slide width minus margins
+                    height = Inches(5)    # Reasonable height for content
+                    
+                    # Add text box for the content
+                    txBox = slide.shapes.add_textbox(left, top, width, height)
+                    tf = txBox.text_frame
+                    
+                    # Add user query
+                    p = tf.add_paragraph()
+                    p.text = "User Query: I want to learn about photosynthesis"
+                    p.font.bold = True
+                    
+                    # Add agent response
+                    if agent_response:
+                        p = tf.add_paragraph()
+                        p.text = agent_response if isinstance(agent_response, str) else str(agent_response)
+                        p.space_after = Pt(12)  # Add some space after the paragraph
+                    
+                    # Save the presentation
+                    pptx_filename = "learning_report.pptx"
+                    prs.save(pptx_filename)
+                    print(f"✅ PowerPoint file '{pptx_filename}' generated successfully!")
+                    
                 else:
                     print(f"✅ Response: {response_data}")
             except json.JSONDecodeError:

@@ -963,6 +963,7 @@ class MultiAgentEducationAssistant:
             cur.close()
             conn.close()
             if result and result[0]:
+                print(type(result[0]), result[0])
                 found_task = result[0] # cmetadata is the first (and only) column selected
                 print(f"DEBUG: Task {task_id} found in LangChain PGVector.")
                 return found_task
@@ -990,6 +991,9 @@ class MultiAgentEducationAssistant:
         if isinstance(task, str):
             task = json.loads(task)
         if task:
+            # Apply requested updates before persisting.
+            task.update(updates or {})
+            task["id"] = str(task_id)
             # Update in vector store (DB)
             self._update_task_in_vector_store(task)
             return task

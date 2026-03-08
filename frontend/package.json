@@ -2,8 +2,11 @@
   "name": "langgraph_assistant",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17 <23"
+  },
   "scripts": {
-    "dev": "next-dev-https -p 3001",
+    "dev": "next dev --experimental-https -p 3001",
     "dev:http": "next dev -p 3001",
     "build": "next build",
     "start": "next start",

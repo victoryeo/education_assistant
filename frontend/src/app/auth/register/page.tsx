@@ -33,6 +33,28 @@ export default function SignUp() {
     }
 
     try {
+      // Register in Django backend first (source of truth).
+      const response2 = await fetch('http://localhost:8000/register/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          picture: null
+        })
+      })
+      console.log(response2)
+      const result2 = await response2.json()
+      console.log("result2", result2)
+      if (!response2.ok) {
+        setError(result2.error || result2.message || 'Registration failed')
+        return
+      }
+
+      // Keep local Next.js user store in sync for auth UI profile lookup.
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: {
@@ -47,44 +69,14 @@ export default function SignUp() {
       console.log(response)
       const result = await response.json();
       console.log("result", result)
-      if (response.ok) {
-        // call backend to register user
-        const response2 = await fetch('http://localhost:8000/register/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            picture: null
-          })
-        })
-        console.log(response2)
-        const result2 = await response2.json()
-        console.log("result2", result2)
-        if (response2.ok) {
-          router.push('/auth/signin?message=Registration successful')
-        } else {
-          setError(result2.message || 'Backend Result not ok')
-          //delete user
-          const response3 = await fetch('/api/users', {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: formData.email,
-            })
-          })
-          console.log(response3)
-          const result3 = await response3.json()
-          console.log("result3", result3)
-        }
-      } else {
-        setError(result.message || 'User Result not ok')
+
+      // Ignore duplicate local user; backend registration already succeeded.
+      if (!response.ok && result?.message !== 'User already exists') {
+        setError(result?.message || 'Failed to sync local user')
+        return
       }
+
+      router.push('/auth/signin?message=Registration successful')
     } catch (error) {
       setError('Something was wrong')
     } finally {

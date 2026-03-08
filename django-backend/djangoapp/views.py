@@ -13,6 +13,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.viewsets import GenericViewSet
 from django.db.models import Q, Count, F, Case, When, Value, IntegerField
 import os
+from asgiref.sync import async_to_sync
 from authlib.integrations.django_client import OAuth
 from django.urls import reverse
 from .mongodb_utils import get_user_by_email, create_user
@@ -48,18 +49,10 @@ class UserRegistrationView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            import asyncio
-            # Create a new event loop for this thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
             # Check if user exists in MongoDB
             print("Check if user exists in MongoDB")
             try:
-                # Run the async function and get the result
-                existing_user = loop.run_until_complete(
-                    get_user_by_email(email)
-                )
+                existing_user = async_to_sync(get_user_by_email)(email)
                 if existing_user:
                     return Response(
                         {'error': 'User with this email already exists'},
@@ -72,9 +65,7 @@ class UserRegistrationView(APIView):
                     'name': name,
                     'disabled': False
                 }
-                created_user = loop.run_until_complete(
-                    create_user(user_data)
-                )
+                created_user = async_to_sync(create_user)(user_data)
                 if not created_user:
                     return Response(
                         {'error': 'Failed to create user'},
@@ -97,12 +88,6 @@ class UserRegistrationView(APIView):
                     {'error': 'Failed to check user registration'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-            finally:
-                # Clean up the event loop
-                try:
-                    loop.close()
-                except Exception as e:
-                    print(f"Error closing event loop: {str(e)}")
         except json.JSONDecodeError:
             return Response(
                 {'error': 'Invalid JSON'},
@@ -447,18 +432,8 @@ class ParentTaskViewSet(TaskViewSet):
                 # Get the parent assistant and process the message
                 self.parent_assistant = self.get_parent_assistant()
                 if self.parent_assistant:
-                    # Run the async process_message in an event loop
-                    import asyncio
-                    
-                    # Create a new event loop for this thread
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
                     try:
-                        # Run the async function and get the result
-                        result = loop.run_until_complete(
-                            self.parent_assistant.process_message(message)
-                        )
+                        result = async_to_sync(self.parent_assistant.process_message)(message)
                         
                         # Handle the response - it should be a tuple of (response, tasks)
                         if isinstance(result, tuple) and len(result) == 2:
@@ -480,12 +455,6 @@ class ParentTaskViewSet(TaskViewSet):
                         print(f"Error in process_message: {str(e)}")
                         data['assistant_response'] = "I encountered an error processing your request. Please try again."
                         data['created_tasks'] = []
-                    finally:
-                        # Clean up the event loop
-                        try:
-                            loop.close()
-                        except Exception as e:
-                            print(f"Error closing event loop: {str(e)}")
                 
             except Exception as e:
                 print(f"Error processing message: {str(e)}")

@@ -1,6 +1,5 @@
-import os
 import certifi
-from motor.motor_asyncio import AsyncIOMotorClient
+import pymongo
 from django.conf import settings
 from bson import ObjectId
 from datetime import datetime
@@ -9,22 +8,22 @@ from datetime import datetime
 MONGODB_URI = settings.MONGODB_URI
 DB_NAME = settings.MONGODB_DB_NAME
 
-# For async operations
-async_client = AsyncIOMotorClient(
+# Use sync client to avoid event-loop lifecycle issues in sync Django views.
+sync_client = pymongo.MongoClient(
     MONGODB_URI,
     tls=True,
     tlsCAFile=certifi.where(),
 )
-db = async_client[DB_NAME]
+db = sync_client[DB_NAME]
 
 # Password hashing
 from passlib.context import CryptContext
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 
 async def get_user_by_email(email: str):
     """Get user by email from MongoDB"""
     try:
-        user_data = await db.users.find_one({"email": email})
+        user_data = db.users.find_one({"email": email})
         if user_data:
             # Convert ObjectId to string for JSON serialization
             user_data["id"] = str(user_data["_id"])
@@ -47,7 +46,7 @@ async def create_user(user_data: dict):
         user_data['updated_at'] = now
         
         # Insert user into database
-        result = await db.users.insert_one(user_data)
+        result = db.users.insert_one(user_data)
         if result.inserted_id:
             user_data['id'] = str(result.inserted_id)
             return user_data
@@ -60,7 +59,7 @@ async def update_user(user_id: str, update_data: dict):
     """Update user in MongoDB"""
     try:
         update_data['updated_at'] = datetime.utcnow()
-        result = await db.users.update_one(
+        result = db.users.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": update_data}
         )
@@ -74,7 +73,7 @@ async def update_user(user_id: str, update_data: dict):
 async def get_user_by_id(user_id: str):
     """Get user by ID from MongoDB"""
     try:
-        user_data = await db.users.find_one({"_id": ObjectId(user_id)})
+        user_data = db.users.find_one({"_id": ObjectId(user_id)})
         if user_data:
             user_data["id"] = str(user_data["_id"])
             return user_data

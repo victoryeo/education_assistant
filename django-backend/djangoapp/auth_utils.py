@@ -39,9 +39,9 @@ async def get_or_create_user_mongodb(google_user_data):
 
 # Keep the original function for backward compatibility
 def get_or_create_user(google_user_data):
-    """Synchronous wrapper for get_or_create_user_async."""
-    import asyncio
-    return asyncio.run(get_or_create_user_async(google_user_data))
+    """Synchronous wrapper for get_or_create_user_mongodb."""
+    from asgiref.sync import async_to_sync
+    return async_to_sync(get_or_create_user_mongodb)(google_user_data)
 
 def verify_google_token(token):
     """Verify Google OAuth token and return user data."""

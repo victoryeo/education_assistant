@@ -14,7 +14,7 @@ class MongoDBAuthenticationBackend(ModelBackend):
         # Initialize MongoDB client
         self.mongo_client = pymongo.MongoClient(settings.MONGODB_URI)
         self.db = self.mongo_client[settings.MONGODB_DB_NAME]
-        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        self.pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
         # Initialize _db to None, it will be set by Django
         self._db = None
     

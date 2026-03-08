@@ -30,7 +30,7 @@ class Command(BaseCommand):
             return
         
         # Check the password
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
         is_valid = pwd_context.verify(password, hashed_password)
         
         if is_valid:

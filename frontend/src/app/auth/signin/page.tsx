@@ -32,40 +32,10 @@ export default function SignIn() {
       setLoading(false)
       return
     }
-    
-    const response = await fetch('/api/users', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-    const data = await response.json()
-    console.log(data)
-    
-    const user = data.find((u: any) => u.email === email)
-    console.log(user)
 
-    if (user) {
-      // Ensure picture URL is properly formatted
-      const userInfo = {
-        name: user.name,
-        email: user.email,
-        picture: user.picture
-      };
-      
-      // If picture is a relative path, ensure it starts with a forward slash
-      if (userInfo.picture && !userInfo.picture.startsWith('http') && !userInfo.picture.startsWith('/')) {
-        userInfo.picture = `/${userInfo.picture}`.replace(/\/+/g, '/');
-      }
-      
-      setUserInfo(userInfo);
-      // Also store in localStorage directly to ensure it's available on page reload
-      localStorage.setItem('user_info', JSON.stringify(userInfo));
-    }
     // Create a URLSearchParams object to format the data as form-urlencoded
     const reqBody = new URLSearchParams({
-      email: user.email,
-      username: user.name,
+      email,
       password: password,
     });
     // call backend to get token
@@ -84,6 +54,15 @@ export default function SignIn() {
       setIsLoggedIn(true)
       setLoading(false)
 
+      const backendUser = result2?.user || {}
+      const userInfo = {
+        name: backendUser.name || '',
+        email: backendUser.email || email,
+        picture: backendUser.picture || null,
+      };
+      setUserInfo(userInfo);
+      localStorage.setItem('user_info', JSON.stringify(userInfo));
+
       if (result2?.access_token) {
         // Store the tokens
         localStorage.setItem('access_token', result2.access_token);
@@ -91,7 +70,11 @@ export default function SignIn() {
       }
       router.push('/')
     } else {
-      setError(result2.message || 'Token Result not ok')
+      const apiError = result2?.detail
+        || result2?.error
+        || result2?.non_field_errors?.[0]
+        || result2?.message;
+      setError(apiError || 'Token Result not ok')
       setLoading(false)
     }
 

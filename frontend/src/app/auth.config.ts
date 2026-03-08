@@ -20,19 +20,37 @@ const providers: Provider[] = [
         const email = credentials.email as string
         const password = credentials.password as string
 
-        const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3001';
-        const response = await fetch(`${baseUrl}/api/auth/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+        const reqBody = new URLSearchParams({
+          email,
+          password,
         });
-        console.log(response)
-        if (response.ok) {
-          const user = await response.json();
-          console.log('ok', user)
-          return user;
-        } else {
-          console.error("user not found")
+
+        try {
+          const response = await fetch(`${backendUrl}/token/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: reqBody,
+          });
+          console.log(response)
+          if (!response.ok) {
+            console.error("user not found")
+            return null
+          }
+
+          const data = await response.json();
+          const user = data?.user;
+          if (!user?.email) {
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name || ''
+          };
+        } catch (err) {
+          console.error("authorize error", err)
           return null
         }
       }
